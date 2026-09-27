@@ -5,8 +5,8 @@ The application combines touch positioning, hand gestures for altitude control, 
 
 ## Current status
 
-The project is in planning. This repository contains documentation but no application code, dependency definitions, lockfiles, or automated tests.
-There is no runnable application yet. The repository contains no hardware compatibility or flight-performance test results.
+The project is in development. [`web/`](web/) holds the tablet web app, ported from the interface mockup without changes to its layout, look, or behavior. It still simulates the flight host, the drones, and the Multi-ranger readings in the page ([DEC-18](CONTEXT.md#accepted-decisions-made-after-the-proposal)).
+The command bridge, trial analysis, and onboard firmware do not exist yet. The repository contains no hardware compatibility or flight-performance test results.
 
 This README describes the planned software architecture, setup needs, dependencies, development steps, and tests.
 [CONTEXT.md](CONTEXT.md) defines the thesis requirements, accepted decisions, evaluation method, and glossary.
@@ -37,11 +37,34 @@ flowchart TB
 | C++ | The existing Crazyswarm2 backend. No new radio implementation is planned. |
 
 The runtime plan uses local model and browser files. It does not require cloud inference.
+
+### Repository layout
+
+| Folder | Contents | Status |
+|---|---|---|
+| [`web/`](web/) | Tablet web app: TypeScript, Vite, Vitest | Exists. Ported from the mockup; the host is still simulated in the page. |
+| `bridge/` | Command bridge: Python 3.12, uv, aiohttp, Pydantic, pytest | Planned (roadmap part 1). |
+| [`protocol/`](protocol/) | Message format v1 and the shared example messages | Exists. |
+| `analysis/` | Trial analysis: NumPy, SciPy, in a separate environment | Planned. |
+| `firmware/` | Onboard obstacle-stop code | Planned (roadmap part 5). |
+| [`scripts/`](scripts/) | Repository checks | Exists. |
 The front camera reads the hand. Motion capture measures drone positions. The selected video feed needs separate onboard camera equipment.
 
 ## Setup and usage
 
-Installation and launch commands are not available yet. Setup instructions will follow the first runnable build and dependency definitions.
+The tablet web app needs Node.js 24 or later. From `web/`:
+
+```bash
+npm ci
+```
+
+```bash
+npm run dev
+```
+
+`npm ci` installs the locked dependencies. `npm run dev` first runs `scripts/setup-mediapipe.mjs`, which copies the Gesture Recognizer WASM files from the installed package and downloads the pinned model once, checking its size and SHA-256 against the [versions table](#versions). It then starts the Vite development server. `npm run build` writes a production build, with the offline service worker, to `web/dist/`.
+The page opens the camera only in a secure context: `localhost` works on the development computer. Opening the app on the tablet needs HTTPS, which the mkcert setup in the [versions table](#versions) will provide. It is not configured yet.
+
 The planned environments have these roles:
 
 | Environment | Purpose and setup needs |
@@ -161,7 +184,8 @@ Identify the equipment in each calibration record. Setup commands will follow ap
 
 ## Testing
 
-No application tests exist yet. The implementation needs three levels of checks:
+The web app has unit tests. Run them from `web/` with `npm test`. They check each shared [example message](protocol/examples/) against the v1 wire rules, the Crazyflie battery curve, the drag and hoop geometry, and the text formats.
+The implementation needs three levels of checks:
 
 - Use the mock connection to check command fields, limits, input state, and trial records against the [control requirements](CONTEXT.md#required-interactions-and-control-behavior).
 - Use the physical tablet to check camera access, three touch contacts, gestures, and video together.

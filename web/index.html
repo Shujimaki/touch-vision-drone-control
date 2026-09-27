@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Thesis UI">
+<meta name="theme-color" content="#181C18">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon-64.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<title>Thesis UI Mockup</title>
+<script type="module" src="/src/main.ts"></script>
+</head>
+<body>
+<div class="rotate" id="rotate" hidden aria-hidden="true">Turn the tablet to landscape.<br><span style="font-weight:400;font-size:14px">The interface runs in a fixed landscape layout (§1.7.3.5).</span></div>
+<div class="stage" id="stage">
+<div class="app" id="app">
+
+
+
+<!-- =============================== SIDE PANEL =============================== -->
+<aside class="side" id="side">
+  <section class="card" aria-label="Controls, hand camera and video">
+    <div class="shead">
+      <div class="vtabs" role="tablist" aria-label="Main view">
+    <button role="tab" id="tabMap" aria-selected="true" aria-controls="mapbody">Map</button>
+    <button role="tab" id="tabTel" aria-selected="false" aria-controls="telPane">Telemetry</button>
+  </div>
+      <button class="gear" id="setBtn" aria-expanded="false" aria-controls="settings" aria-label="Settings"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
+    </div>
+    <div class="scroll">
+      <div class="sec" id="secCam">
+        <div class="camhead"><button aria-expanded="true">Hand camera<svg class="ico" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="m6 15 6-6 6 6"/></svg></button>
+          <button class="camico" id="camBtn" aria-label="Turn the hand camera on" aria-pressed="false" title="Camera on/off"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="13" height="12" rx="2"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/><path class="slash" d="M3 3l18 18"/></svg></button></div>
+        <div class="sbody">
+          <div class="feed"><video id="camVideo" class="mirror" playsinline muted autoplay hidden></video>
+            <svg id="camSvg" viewBox="0 0 320 240" preserveAspectRatio="xMidYMid slice"></svg>
+            <span class="camnote" id="camNote" hidden></span></div>
+          <div class="gstat" id="gstat"><b id="gMain">--</b><span id="gSub"></span></div>
+        </div>
+      </div>
+      <div class="sec" id="secVid">
+        <button aria-expanded="true">Video<svg class="ico" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="m6 15 6-6 6 6"/></svg></button>
+        <div class="sbody">
+          <div id="fheadSlot"><div class="fhead" id="fhead" role="radiogroup" aria-label="Video feed source"><button class="cbs" data-fs="cf1" role="radio" aria-label="Show DRONE 1 video, battery and signal"><span class="ds" id="ds-cf1"><b>1</b><span class="bt"><i></i></span><span class="m v">--</span><span class="sg"><i></i><i></i><i></i><i></i></span></span></button><button class="cbs" data-fs="cf2" role="radio" aria-label="Show DRONE 2 video, battery and signal"><span class="ds" id="ds-cf2"><b>2</b><span class="bt"><i></i></span><span class="m v">--</span><span class="sg"><i></i><i></i><i></i><i></i></span></span></button><button class="cbs" data-fs="cf3" role="radio" aria-label="Show DRONE 3 video, battery and signal"><span class="ds" id="ds-cf3"><b>3</b><span class="bt"><i></i></span><span class="m v">--</span><span class="sg"><i></i><i></i><i></i><i></i></span></span></button></div></div>
+          <div id="sideFeed"></div>
+          <div class="heldalt" id="heldAlt"></div>
+        </div>
+      </div>
+    </div>
+    <div class="foot">
+      <div class="trl" id="trl" aria-live="polite">
+        <button class="trbtn" id="trGo"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M7 4v16l13-8z" fill="currentColor"/></svg><span>Start trial</span><small id="trNext">S1-T1</small></button>
+        <div class="trrun" id="trRun" hidden><span class="trdot"></span><span class="trlab">Trial running</span></div>
+      </div>
+      <!-- one row: the selected drone's next action (rounded, names the drone), then all drones (square) -->
+      <div class="crow">
+        <button class="pair to" id="btnTakeoffSel"><span>Take off</span><small>DRONE 1</small></button>
+        <button class="pair ld" id="btnLandSel" hidden><span>Land</span><small>DRONE 1</small></button>
+        <button class="gbtn" id="btnTakeoff">Take off all</button>
+        <button class="gbtn" id="btnLand">Land all</button>
+      </div>
+      <button class="estop" id="estop" aria-label="Emergency stop. Press and hold for one second.">
+      <svg width="38" height="38" viewBox="0 0 38 38" aria-hidden="true"><circle class="rbg" cx="19" cy="19" r="15" fill="none" stroke-width="4"/><circle class="rfg" id="estopRing" cx="19" cy="19" r="15" fill="none" stroke-width="4" stroke-dasharray="94.25" stroke-dashoffset="94.25" transform="rotate(-90 19 19)"/><rect x="13.5" y="13.5" width="11" height="11" rx="1" fill="#F2453D"/></svg>
+      <span><strong id="estopTitle">E-STOP</strong><small id="estopSub">Hold 1 s</small></span>
+        </button>
+    </div>
+  </section>
+</aside>
+
+<!-- altitude readout, beside the cameras in the left panel (§1.7.3.5) -->
+<aside class="altcol" aria-label="Altitude">
+  <div class="alt"><div class="h">ALT<span class="m dim" style="font-weight:400">m</span></div><svg id="tapeSvg" viewBox="0 0 100 600" preserveAspectRatio="none"></svg></div>
+</aside>
+
+
+
+<!-- =============================== MAP =============================== -->
+<main class="main">
+  <section class="mapcard" aria-label="Arena map and telemetry">
+    <div class="mapbody" id="mapbody" role="tabpanel" aria-labelledby="tabMap">
+      <button class="ticker" id="logToggle" aria-label="Latest event. Open the event log."><span class="dot" id="lastDot"></span><span class="ln" id="logLatest"></span></button>
+      <div class="alertbar" id="alertBar" role="alert" hidden><span id="alertTxt"></span><button id="alertOk">Dismiss</button></div>
+      <div class="mapchip"><span class="scale"><i id="scaleBar"></i><span class="m">1 m</span></span><span class="m" id="cursor">--</span></div>
+      <svg id="mapSvg" viewBox="0 0 600 600" preserveAspectRatio="none" role="application" aria-label="Tap a unit to select, hold and drag to set target"><g id="mapStatic"></g><g id="mapDyn"></g></svg>
+    </div>
+    <div class="telpane" id="telPane" role="tabpanel" aria-labelledby="tabTel" hidden>
+      <section class="tcard"><h3>Drones</h3><div class="tscroll"><table class="ttab" id="telTable"></table></div></section>
+      <div class="tel-row">
+        <section class="tcard"><h3>Altitude channel</h3><dl class="kvs" id="telAlt"></dl></section>
+        <section class="tcard"><h3>Trial</h3><dl class="kvs" id="telTrial"></dl></section>
+      </div>
+      <section class="tcard"><h3>Health<button class="gbtn" id="hcBtn" style="height:24px;padding:0 10px;font-size:11px">Run health check</button></h3><div class="tscroll"><table class="ttab" id="telHealth"></table></div></section>
+      <section class="tcard tlog"><h3>Event log<span class="logtools"><span id="logCount"></span><label class="logsel">Session <select id="logSes" aria-label="Filter the event log by participant session"><option value="all">All</option></select></label><label class="logsel">Trial <select id="logView" aria-label="Filter the chosen session by trial" disabled><option value="all">All</option></select></label></span></h3>
+        <dl class="kvs trsum" id="logSum" hidden></dl><ol id="telLog"></ol></section>
+    </div>
+  </section>
+</main>
+
+<!-- hidden store for the video tiles that are not shown -->
+<aside class="feeds" aria-label="Drone camera feeds" id="feeds"></aside>
+
+<!-- =============================== SYNC LAYOUT WITH MOTIVE =============================== -->
+<div class="sync" id="syncDlg" role="dialog" aria-modal="true" aria-labelledby="syncTitle" hidden>
+  <div class="dlg">
+    <div class="dh" id="syncTitle">Sync layout with Motive</div>
+    <div class="db">
+      <p id="syncStatus">Reading rigid bodies from Motive…</p>
+      <div class="tscroll"><table class="ttab" id="syncTable"></table></div>
+      <p>Simulated in this mockup. In the real system the ground station reads the marked rigid bodies from Motive and sends the new course to the tablet.</p>
+    </div>
+    <div class="df"><button class="tbtn2" id="syncCancel">Cancel</button><button class="apply" id="syncApply" disabled>Apply to map</button></div>
+  </div>
+</div>
+
+<!-- =============================== SETTINGS DRAWER =============================== -->
+<section class="settings" id="settings" aria-label="Settings" hidden>
+  <div class="set-h"><span>Settings</span><button id="setClose" aria-label="Close settings"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="set-b">
+    <div class="set-g">Trial</div>
+    <button class="sw-row reset" id="trCol" disabled>Record a collision</button>
+    <button class="sw-row reset" id="trVoid" disabled>Void trial (hardware fault)</button>
+    <button class="sw-row reset" id="trSession">Next participant</button>
+    <button class="sw-row reset" id="trExport">Export log</button>
+    <div class="set-g">Course</div>
+    <button class="sw-row reset" id="syncBtn">Sync layout with Motive</button>
+    <p class="note" id="syncNote">Figure 5 layout</p>
+    <div class="set-g">Flight</div>
+    <div class="stp" data-k="zmin"><span>Minimum altitude</span><button data-d="-1" aria-label="Decrease">−</button><b class="m"></b><button data-d="1" aria-label="Increase">+</button></div>
+    <div class="stp" data-k="zmax"><span>Maximum altitude</span><button data-d="-1" aria-label="Decrease">−</button><b class="m"></b><button data-d="1" aria-label="Increase">+</button></div>
+    <div class="stp" data-k="rate"><span>Maximum climb rate</span><button data-d="-1" aria-label="Decrease">−</button><b class="m"></b><button data-d="1" aria-label="Increase">+</button></div>
+    <div class="stp" data-k="dhtrig"><span>Defensive hover distance</span><button data-d="-1" aria-label="Decrease">−</button><b class="m"></b><button data-d="1" aria-label="Increase">+</button></div>
+    <div class="stp" data-k="tlim"><span>Trial time limit</span><button data-d="-1" aria-label="Decrease">−</button><b class="m"></b><button data-d="1" aria-label="Increase">+</button></div>
+    <div class="set-g">Display</div>
+    <button class="sw-row" data-o="light">Light mode</button>
+    <button class="sw-row" data-o="lefty">Left-handed layout</button>
+    <button class="sw-row reset" id="fsBtn">Fullscreen</button>
+    <div class="set-g">Simulation</div>
+    <div class="seg" id="gestSeg"><button data-g="idle">Idle</button><button data-g="confirming">Confirming</button><button data-g="climb">Active climb</button><button data-g="descend">Active descend</button><button data-g="locked">Locked</button><button data-g="unrecognized">Unrecognized pose</button><button data-g="lost" style="grid-column:span 2">Tracking lost</button></div>
+    <button class="sw-row" data-t="simHold">Hold DRONE 1 + DRONE 2</button>
+    <button class="sw-row" data-t="degraded">Link degraded</button>
+    <button class="sw-row" data-t="lowBatt">DRONE 3 low battery (3.15 V)</button>
+    <button class="sw-row" data-t="motorFault">DRONE 2 motor M3 fault</button>
+    <button class="sw-row" data-t="cf3Lost">DRONE 3 disconnected</button>
+    <button class="sw-row" data-t="proximity">Send DRONE 3 toward DRONE 2</button>
+    <button class="sw-row reset" id="simReset">Reset scenario</button>
+  </div>
+</section>
+
+</div>
+</div>
+
+</body>
+</html>

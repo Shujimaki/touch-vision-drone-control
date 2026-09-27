@@ -1,0 +1,27 @@
+{
+  "name": "touch-vision-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Tablet web app: touch map, hand-camera altitude channel, video and telemetry (roadmap parts 1 to 3, 5 and 6).",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "setup:mediapipe": "node scripts/setup-mediapipe.mjs",
+    "dev": "npm run setup:mediapipe && vite",
+    "build": "npm run setup:mediapipe && tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "1.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
+  }
+}
