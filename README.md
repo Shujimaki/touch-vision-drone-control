@@ -174,12 +174,6 @@ Before each commit and pull request, stage the change and run `python3 scripts/c
 It checks ignored files, possible secrets, local links and anchors, the example messages, and changed Mermaid diagrams.
 After their configuration files exist, it also runs pytest, `tsc`, and Vitest. [AGENTS.md](AGENTS.md#before-delivery) lists the checks that need judgment.
 
-## Interface mockup
-
-A clickable design mockup of the tablet interface is at [jaz-villanueva/Thesis-UI-Mockup](https://github.com/jaz-villanueva/Thesis-UI-Mockup), published at <https://jaz-villanueva.github.io/Thesis-UI-Mockup/>.
-It is a design prototype, not application code ([DEC-18](CONTEXT.md#accepted-decisions-made-after-the-proposal)). It simulates the flight host, the drones and the Multi-ranger readings in the browser.
-It runs the pinned Gesture Recognizer files from its own copy.
-
 ## Project documentation
 
 - Read [CONTEXT.md](CONTEXT.md) for the thesis purpose, requirements, decisions, open questions, and glossary.
