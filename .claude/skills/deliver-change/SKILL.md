@@ -1,6 +1,6 @@
 ---
 name: deliver-change
-description: Deliver a change to this repository through a topic branch, the repository checks, a conventional commit, a reviewed pull request, and a squash-merge. Use when committing, opening or updating a pull request, or merging in this repository. Use it instead of /commit, /ship, or the git-pr skills.
+description: Deliver a change to this repository through a topic branch, the repository checks, a conventional commit, a pull request, and a squash-merge. Use when committing, opening or updating a pull request, or merging in this repository. Use it instead of /commit, /ship, or the git-pr skills.
 ---
 
 # Deliver Change
@@ -95,7 +95,7 @@ Done when `git status -sb` shows the branch tracking its `origin` branch, with n
    - **Reviewers.** Name the owner of the affected part from the ROADMAP.md "Software parts" table. Changes to `protocol/` need both teams.
 4. Write the title in the commit title format, with 50 characters or fewer. The squash-merge makes it the commit subject on `main`.
 5. Show the user the title and the body. Wait for approval, and apply the user's edits.
-6. If no CODEOWNERS file assigns the reviewers, ask the user for their GitHub usernames.
+6. If step 7 requires an approval, find the reviewers. If no CODEOWNERS file assigns them, ask the user for the reviewers' GitHub usernames.
 7. Create the pull request. Add `--draft` when the change needs the other team's review. Every `protocol/` change needs it. Add `--reviewer <login>` for each username.
 
    ```bash
@@ -113,9 +113,13 @@ Done when `gh pr view --json url,title,isDraft` shows the pull request with the 
 
 Merge only when all of these conditions are true:
 
-- The reviewers from step 6 approved. For a `protocol/` change, both teams approved.
+- The pull request has the approvals it needs:
+  - A `protocol/` change: both teams approved.
+  - Any other change: one reviewer approved, or the user is a repository admin.
 - The pull request is not a draft.
 - The user approved the merge.
+
+To check the admin role, run `gh api 'repos/{owner}/{repo}' --jq .permissions.admin`. It prints `true` for an admin.
 
 Write the squash commit body to `merge-body.md` in the scratchpad. Use the why bullets and labels from the branch commits. Add no trailer.
 Then merge with an explicit subject, so that GitHub adds no ` (#N)` suffix and no commit list:
@@ -125,5 +129,7 @@ gh pr merge <number> --squash --delete-branch \
   --subject '<pull request title>' --body-file "<scratchpad>/merge-body.md"
 git switch main && git pull --ff-only
 ```
+
+If an admin merges a pull request without an approval, add `--admin` to `gh pr merge`. The `main` ruleset lets admins skip the approval, but only through a pull request.
 
 Done when `git log -1 --format=%B main` shows one conventional commit without a trailer, and `git branch --list <branch>` prints nothing.
