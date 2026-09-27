@@ -234,6 +234,7 @@ Exact statistical tests, scoring variants, and missing-data rules remain unspeci
 
 The project supplied DEC-01 to DEC-08 on **17 September 2026**. It accepted REC-01 and added DEC-09 and DEC-10 on **23 September 2026**.
 The software team accepted DEC-11 on **27 September 2026**. Review by the hardware team is pending.
+The project added DEC-12 on **27 September 2026**.
 This register owns their status.
 These choices are separate from proposal claims. [README.md](README.md) describes their planned software implementation and dependency recommendations.
 
@@ -251,6 +252,7 @@ These choices are separate from proposal claims. [README.md](README.md) describe
 | DEC-09: Accepted project decision, 23 September 2026 | Write the tablet web app in TypeScript, not plain JavaScript. |
 | DEC-10: Accepted project decision, 23 September 2026 | Build the tablet web app without a UI framework. Use browser APIs directly. |
 | DEC-11: Accepted project decision, 27 September 2026 (software team). Hardware team review pending. | Use version 1 of the [tablet and host messages](protocol/README.md). The tablet runs the altitude-channel state machine and sends the requested rate. The host owns the altitude targets, altitude limits, course mode, and trial clock. |
+| DEC-12: Accepted project decision, 27 September 2026 | Host the source repository publicly on GitHub under the account `Shujimaki`, and release it as open source. The account has no GitHub Pro. Without GitHub Pro, a personal account's private repositories have no protected branches, required reviewers, or code owners. [7][7] REQ-12 (SO6) also requires a public repository with the complete source code. SO6 names GitHub as an example host. [1][1], PDF pp. 22 and 25. The public repository supports REQ-12 but does not complete it. The project has not selected a license. |
 
 ## Unknowns, contradictions, and open decisions
 
@@ -337,6 +339,7 @@ The glossary uses the proposal glossary, §§1.6–1.7.8, and the project decisi
 4. [Bitcraze commander framework, undated][4]. Official setpoint and timeout documentation, checked 17 September 2026.
 5. [MediaPipe Gesture Recognizer web guide, updated 17 August 2026][5]. Gesture labels and outputs checked on 17 September 2026 through Context7 and the official web guide.
 6. [Bitcraze AI deck product documentation, undated][6]. The camera/Wi-Fi example was checked 17 September 2026 through Parallel Search. The project has not selected this component.
+7. [GitHub's plans, undated][7]. Official plan features for private repositories, checked 27 September 2026 through the GitHub Docs API.
 
 [1]: #references
 [2]: #accepted-decisions-made-after-the-proposal
@@ -344,3 +347,4 @@ The glossary uses the proposal glossary, §§1.6–1.7.8, and the project decisi
 [4]: https://www.bitcraze.io/documentation/repository/crazyflie-firmware/master/functional-areas/sensor-to-control/commanders_setpoints/
 [5]: https://developers.google.com/edge/mediapipe/solutions/vision/gesture_recognizer/web_js
 [6]: https://www.bitcraze.io/products/ai-deck
+[7]: https://docs.github.com/en/get-started/learning-about-github/githubs-plans
