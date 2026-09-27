@@ -1,0 +1,94 @@
+{
+    "type": "course",
+    "v": 1,
+    "seq": 30211,
+    "host_ms": 5290330.0,
+    "config_id": "motive-20260927-1402",
+    "pending": true,
+    "bodies_found": 9,
+    "bodies_expected": 9,
+    "course": {
+        "room": {
+            "x_min": 0.0,
+            "x_max": 5.31,
+            "y_min": 0.0,
+            "y_max": 3.55
+        },
+        "capture_volume": {
+            "x_min": 0.25,
+            "x_max": 5.06,
+            "y_min": 0.25,
+            "y_max": 3.3
+        },
+        "restricted_zone": {
+            "x_min": 2.065,
+            "x_max": 3.245,
+            "y_min": 1.185,
+            "y_max": 2.365
+        },
+        "obstacles": [
+            {
+                "id": "O1",
+                "x_min": 1.045,
+                "x_max": 1.575,
+                "y_min": 1.305,
+                "y_max": 1.815,
+                "height": 1.02
+            },
+            {
+                "id": "O2",
+                "x_min": 2.335,
+                "x_max": 2.865,
+                "y_min": 2.455,
+                "y_max": 2.965,
+                "height": 1.53
+            }
+        ],
+        "hoops": [
+            {
+                "id": "H1",
+                "x": 1.31,
+                "y": 2.7,
+                "z": 1.0,
+                "diameter": 0.4,
+                "plane": "horizontal",
+                "yaw": 0.0
+            },
+            {
+                "id": "H2",
+                "x": 3.99,
+                "y": 2.7,
+                "z": 0.5,
+                "diameter": 0.4,
+                "plane": "vertical",
+                "yaw": 90.0
+            },
+            {
+                "id": "H3",
+                "x": 3.99,
+                "y": 1.49,
+                "z": 1.5,
+                "diameter": 0.4,
+                "plane": "vertical",
+                "yaw": 90.0
+            }
+        ],
+        "pads": [
+            {
+                "id": "cf1",
+                "x": 2.35,
+                "y": 0.45
+            },
+            {
+                "id": "cf2",
+                "x": 2.65,
+                "y": 0.45
+            },
+            {
+                "id": "cf3",
+                "x": 2.95,
+                "y": 0.45
+            }
+        ]
+    }
+}

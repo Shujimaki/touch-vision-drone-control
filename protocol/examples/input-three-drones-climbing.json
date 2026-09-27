@@ -6,8 +6,8 @@
     "rtt_ms": 14.2,
     "held": [
         { "id": "cf1", "x": 1.2, "y": 0.85, "touch_ms": 812331.2, "follow": true },
-        { "id": "cf2", "x": 1.6, "y": 1.4, "touch_ms": 812329.8, "follow": true },
-        { "id": "cf3", "x": 3.45, "y": 0.75, "touch_ms": 812333.0, "follow": true }
+        { "id": "cf2", "x": 1.95, "y": 1.0, "touch_ms": 812329.8, "follow": true },
+        { "id": "cf3", "x": 0.89, "y": 1.56, "touch_ms": 812333.0, "follow": true }
     ],
     "gesture": { "state": "active", "rate": 0.12, "neutral_y": 0.52 },
     "frames": [

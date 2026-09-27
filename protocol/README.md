@@ -23,6 +23,7 @@ Discrete events and commands travel between these snapshots on the same connecti
 | `command` | Tablet to host | When the operator or experimenter asks | Request a discrete host action, such as takeoff or trial start. |
 | `reply` | Host to tablet | After each `command`, or after an invalid message | Accept or reject a message, with a reason code. |
 | `telemetry` | Host to tablet | Fixed rate, 30 Hz by default | Report measured and commanded state for each drone, the applied altitude rate, and the trial state. |
+| `course` | Host to tablet | After a `layout_read` or `layout_apply` command | Send a course measured in Motive for review, or the course the host now uses. |
 
 ```mermaid
 sequenceDiagram
@@ -47,12 +48,12 @@ The tablet reports what the operator asks for. The host decides what the drones 
 
 | Concern | Tablet web app | Python command bridge |
 |---|---|---|
-| Horizontal placement | Reads each finger contact. Sends the accepted target of each held drone. | Checks each target again. Sets each held drone's horizontal target. |
-| Restricted zone ([REQ-08](../CONTEXT.md#required-interactions-and-control-behavior)) | Rejects drags into the zone during course trials and sends a restriction event. | Rejects any target inside the zone during course trials. |
+| Horizontal placement | Reads each finger contact. Rejects drags that would bring a drone within the drone buffer of another drone at a similar height ([DEC-13](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). Sends the accepted target of each held drone. | Checks each target again. Sets each held drone's horizontal target. |
+| Restricted zone ([REQ-08](../CONTEXT.md#required-interactions-and-control-behavior)) | Rejects drags into the zone at all times and sends a restriction event. | Rejects any target inside the zone at all times, and counts restriction events only while a trial runs ([DEC-20](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). |
 | Altitude channel ([REQ-03 to REQ-06](../CONTEXT.md#required-interactions-and-control-behavior)) | Runs the gesture state machine. Captures the neutral point. Sends the state and the requested rate. | Applies the rate to each held drone's altitude target. Applies altitude limits and the [OPEN-03](../CONTEXT.md#unknowns-contradictions-and-open-decisions) rule. |
 | Released drones ([REQ-07](../CONTEXT.md#required-interactions-and-control-behavior)) | Removes the drone from the held list. Sends the release kind and reason. | Sets the hover target of the released drone. The [OPEN-07](../CONTEXT.md#unknowns-contradictions-and-open-decisions) rule selects the measured or the last commanded position. |
 | Setpoint stream ([TARGET-01](../CONTEXT.md#evaluation-method-and-numerical-targets)) | No role. | Streams setpoints to every airborne drone at 20 Hz or more, whether or not input arrives. |
-| Trial state and time | Shows the trial state from telemetry. | Owns the trial clock, the course mode, and the trial records. |
+| Trial state and time | Shows the trial state from telemetry. | Owns the trial clock and the trial records. |
 | Selected video feed ([DEC-08](../CONTEXT.md#accepted-decisions-made-after-the-proposal)) | Selects the feed locally. Sends a `video_switch` event. | Records the event. The feed transport is unknown ([OPEN-09](../CONTEXT.md#unknowns-contradictions-and-open-decisions)). |
 
 In the proposal, telemetry with Multi-ranger readings, battery level, and altitude returns over the same WebSocket for display and logging ([proposal](../CONTEXT.md#references) §1.7.3.7, PDF p. 42).
@@ -208,9 +209,11 @@ The command names are placeholders. The takeoff, landing, emergency-stop, and ar
 | `land` | `drones`: array of drone names | Starts landing. |
 | `stop` | `{}` | Emergency stop. Its effect and owner are open. |
 | `stop_reset` | `{}` | Clears a stop. The host accepts it only when every drone is grounded. |
-| `set_mode` | `mode`: `course` or `gesture_subtest` | The host rejects it while a trial runs. |
-| `trial_start` | `trial_id`: string | Starts the trial clock and the trial file. |
-| `trial_end` | `outcome`: `completed`, `collision`, `timeout`, or `hardware_abort` | Ends the trial. Hardware aborts stay separate from participant failures ([OPEN-13](../CONTEXT.md#unknowns-contradictions-and-open-decisions)). |
+| `trial_start` | `trial_id`: string | Starts the trial clock and the trial file. The host rejects it with `not_allowed` unless every drone is grounded on its own start position, has a telemetry link, and the emergency stop is clear ([DEC-20](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). |
+| `trial_end` | `outcome`: `collision` or `hardware_abort` | The experimenter ends the trial for a collision the host did not detect, or voids it for a hardware fault. The host ends trials itself: `completed` when every drone has passed H1, H2 and H3 in order and is grounded on its own start position, `timeout` at the time limit, and `collision` when a drone reports `sys.isTumbled` ([DEC-20](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). Hardware aborts stay separate from participant failures ([OPEN-13](../CONTEXT.md#unknowns-contradictions-and-open-decisions)). |
+| `layout_read` | `{}` | Reads the marked rigid bodies from Motive ([DEC-16](../CONTEXT.md#accepted-decisions-made-after-the-proposal)) and sends a `course` message with `pending` set to `true`. The host rejects it with `not_allowed` while a trial runs or a drone is flying. |
+| `health_check` | `{}` | Runs the Crazyflie propeller and battery tests (`health.startPropTest`, then `health.startBatTest`) on every drone ([DEC-21](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). The host rejects it with `not_allowed` while a trial runs or a drone is flying. Results arrive in `drones[].health`. |
+| `layout_apply` | `config_id`: string | Adopts the pending course with that `config_id`. The host sends a `course` message with `pending` set to `false`, and later trial records use it. |
 
 ### `telemetry`
 
@@ -221,8 +224,7 @@ The host sends `telemetry` from a fixed timer. Example: [telemetry-cf3-defensive
 | `host_ms` | number | Host clock when the host built the message. |
 | `ack.seq`, `ack.t_ms` | integer and number, or `null` | `seq` and `t_ms` of the latest valid `input`. |
 | `ack.host_rx_ms` | number or `null` | Host clock when that `input` arrived. |
-| `mode` | `course` or `gesture_subtest` | The current mode. The tablet applies the restricted zone only in `course`. |
-| `trial` | `{id, running, elapsed_ms}` or `null` | The current trial. `elapsed_ms` comes from the host trial clock. |
+| `trial` | `{id, running, elapsed_ms, outcome, hoops}` or `null` | The current or latest trial. `elapsed_ms` comes from the host trial clock. `outcome` is `null` while the trial runs, then `completed`, `collision`, `timeout`, or `hardware_abort`. `hoops` maps each drone to the number of hoops it has passed in order. |
 | `altitude.rate` | m/s | The shared rate that the host applied at this tick. |
 | `altitude.blocked_by` | drone name or `null` | A held drone that cannot follow the shared rate. |
 | `altitude.reason` | `z_max`, `z_min`, `defensive_hover`, or `null` | The cause of the block. The response to a block is [OPEN-03](../CONTEXT.md#unknowns-contradictions-and-open-decisions). |
@@ -236,6 +238,11 @@ The host sends `telemetry` from a fixed timer. Example: [telemetry-cf3-defensive
 | `drones[].ranges` | `{front, back, left, right, up}` in m | Multi-ranger readings, relative to the drone body. |
 | `drones[].defensive_hover` | `{dir, range}` or `null` | Onboard defensive hover. `dir` is a range direction. It depends on the onboard firmware reporting a flag ([DEC-05](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). |
 | `drones[].battery_v` | volt or `null` | Battery voltage. |
+| `drones[].battery_level` | 0 to 90 in steps of 10, or `null` | Firmware `pm.batteryLevel`, from its LiPo charge curve. |
+| `drones[].pm_state` | `battery`, `charging`, `charged`, `lowPower`, `shutDown`, or `null` | Firmware `pm.state`. `lowPower` follows 5 s below `pm.lowVoltage` (3.2 V by default). |
+| `drones[].can_fly`, `drones[].tumbled` | boolean or `null` | Firmware `sys.canfly` and `sys.isTumbled`. |
+| `drones[].health` | `{motor_pass, battery_sag_v, battery_pass, host_ms}` or `null` | Latest `health_check` result. `motor_pass` lists four booleans from `health.motorPass`, motors M1 to M4. `battery_sag_v` is `health.batterySag`. `battery_pass` is `true` when the sag is 0.70 V or less. `null` until a check runs. |
+| `drones[].link_quality` | 0 to 100, or `null` | Share of radio packets acknowledged, in %. The tablet shows it as signal bars, as in Figure 1. `null` when the host has no value. |
 
 ## Timing and failures
 
@@ -264,7 +271,7 @@ The rectangle checks allow 0.001 m, one rounding step. A target within 0.001 m o
 | `input.t_ms` is less than the `t_ms` of the previous `input`. | Reject the `input`. Reply `invalid`. An `event` can carry an earlier `t_ms`, because `t_ms` is the time of occurrence. |
 | `seq` skips a number. | Accept the message. Record the gap. |
 | A drone name is not in `config.drones`, or a held name repeats. | Reject the message. Reply `unknown_drone` or `invalid`. |
-| A held target lies outside the capture volume, or inside the restricted zone in `course` mode. | Ignore that entry. Keep the previous target of that drone. Reply `invalid`. Apply the other entries. |
+| A held target lies outside the capture volume, or inside the restricted zone. | Ignore that entry. Keep the previous target of that drone. Reply `invalid`. Apply the other entries. |
 | A held entry names a drone that is not flying. | Ignore the entry. Report `held: false` in telemetry. |
 | `gesture.rate` is not 0 outside `active`, or its size exceeds `rate_max`. | Reject the `input`. Keep the previous targets. Reply `invalid`. |
 | A command is not allowed in the current state. | Reply `not_allowed` with a detail. |
@@ -274,6 +281,18 @@ The tablet checks `type` and `v` on each received message. It ignores an unknown
 **Version changes.** Until the prototype freeze in Week 12, change a field in one commit. That commit updates this file, the examples, the TypeScript types, and the Pydantic models. After the freeze, increase `v` for any change.
 
 **Trial records (recommendation).** The host can write each received and sent message to the trial file as one JSON line with its arrival time. Then each reported metric can use the raw messages ([OPEN-12](../CONTEXT.md#unknowns-contradictions-and-open-decisions)).
+
+### `course`
+
+The host sends `course` after `layout_read` and after `layout_apply`. Examples: [command-layout-read.json](examples/command-layout-read.json) and [course-pending.json](examples/course-pending.json).
+
+| Field | Type and allowed values | Meaning |
+|---|---|---|
+| `host_ms` | number | Host clock. |
+| `config_id` | string | Identifier of this course. `layout_apply` names it. Trial records store the adopted one. |
+| `pending` | boolean | `true` for a measured course awaiting review. `false` for the course the host now uses. |
+| `course` | object | Same fields as `welcome.config.course`, with positions measured in Motive and converted to the host frame. |
+| `bodies_found`, `bodies_expected` | integer | Rigid bodies read, out of those configured. The tablet flags a missing body before `layout_apply`. |
 
 ## Changes from the earlier draft
 
@@ -287,13 +306,15 @@ The first draft, from 23 September 2026, was an earlier version of [input-three-
 6. Telemetry uses glossary names and measured units. `dh` becomes `defensive_hover`, `battery` becomes `battery_v`, and `stale` becomes `pos_age_ms`. `held`, `ack`, `altitude`, `mode`, and `trial` are new.
 7. The earlier examples used two different origins, (1.20, 0.85) and (−1.45, −1.02). Both were illustrative. The host configuration now supplies the frame.
 
+Changes staged on 27 September 2026, before the prototype freeze: `course`, `layout_read`, `layout_apply`, `health_check`, `drones[].link_quality`, `drones[].battery_level`, `drones[].pm_state`, `drones[].can_fly`, `drones[].tumbled` and `drones[].health` are new. `trial_start` has start conditions. `trial_end` now carries only `collision` or `hardware_abort`, because the host ends completed and timed-out trials itself. `trial.outcome` and `trial.hoops` are new. `mode` and `set_mode` are removed: the restricted zone applies at all times ([DEC-20](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). Sessions and trials use short IDs such as `S1` and `S1-T2`. The example course follows proposal Figure 5, and the example altitude limits follow [DEC-15 and DEC-17](../CONTEXT.md#accepted-decisions-made-after-the-proposal).
+
 ## Open items
 
 These decisions can change field values or rules. They do not need a new field.
 
 | Item | Effect on this format | Owner |
 |---|---|---|
-| Motion-capture origin and axes ([OPEN-08](../CONTEXT.md#unknowns-contradictions-and-open-decisions)) | Confirm that the host frame has `z` up and uses meters. Motion-capture software can stream a `y`-up frame. | Hardware team |
+| Motion-capture origin and axes ([OPEN-08](../CONTEXT.md#unknowns-contradictions-and-open-decisions)) | Motive streams a `y`-up frame by default. The host converts it to the `z`-up frame in meters before sending positions or a `course`. Record the Motive version and streaming settings. | Hardware team |
 | Multi-ranger, battery, and defensive-hover telemetry over the radio | Confirm the rate at which these values reach the host for three drones. | Hardware team |
 | Timeouts ([OPEN-06](../CONTEXT.md#unknowns-contradictions-and-open-decisions)) | Replace the placeholder values in `welcome.config`. | Both teams |
 | Altitude limits and rate constants ([OPEN-01, OPEN-02, OPEN-07](../CONTEXT.md#unknowns-contradictions-and-open-decisions)) | Replace `z_min`, `z_max`, and `rate_max`. | Software team |

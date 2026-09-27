@@ -1,0 +1,8 @@
+{
+    "type": "command",
+    "v": 1,
+    "seq": 12,
+    "t_ms": 64210.8,
+    "name": "health_check",
+    "args": {}
+}

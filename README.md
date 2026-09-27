@@ -74,7 +74,7 @@ This table gives one choice for each layer of the stack. The next table gives th
 | Tablet to host | JSON messages over WebSocket, on HTTPS and WSS, with mkcert certificates. No message library. | [protocol/README.md](protocol/README.md) defines the messages. The software team accepted them as [DEC-11](CONTEXT.md#accepted-decisions-made-after-the-proposal). Hardware team review is pending. The transport tools are recommendations. |
 | Command bridge | Python 3.12, uv, aiohttp, Pydantic, pytest, and pytest-aiohttp | Recommendation. |
 | Flight host | Ubuntu 24.04, ROS 2 Jazzy, and Crazyswarm2 | [REC-01](CONTEXT.md#accepted-decisions-made-after-the-proposal), accepted 23 September 2026. The host computer is an open question. |
-| Motion capture | motion_capture_tracking | The lab system is an open question ([OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions)). |
+| Motion capture | OptiTrack Motive, read through motion_capture_tracking | The lab system is OptiTrack Motive ([DEC-16](CONTEXT.md#accepted-decisions-made-after-the-proposal)). motion_capture_tracking lists OptiTrack support. [[4]](https://github.com/IMRCLab/motion_capture_tracking) The Motive version and streaming settings are still open ([OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions)). |
 | Drone firmware | Crazyflie firmware plus custom C obstacle stop, built with the Ubuntu 24.04 ARM compiler | [DEC-05](CONTEXT.md#accepted-decisions-made-after-the-proposal). The compiler choice is a recommendation. |
 | Video feed | Unknown | Open question ([OPEN-09](CONTEXT.md#unknowns-contradictions-and-open-decisions)). |
 | Trial records | CSV and JSON files, written with the Python standard library | Recommendation. |
@@ -120,7 +120,7 @@ Each owner comes from the [ROADMAP.md software parts](ROADMAP.md#software-parts)
 | Question | Owner | Needed by | Label |
 |---|---|---|---|
 | Which computer is the flight host, and what is its processor architecture? | Hardware team (roadmap part 4) | 2026-10-02 | [OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions) |
-| Which motion-capture vendor, software version, and protocol does the lab use? motion_capture_tracking supports VICON, Qualisys, OptiTrack, VRPN, NOKOV, FZMotion, and Motion Analysis. [[4]](https://github.com/IMRCLab/motion_capture_tracking) | Hardware team with lab staff (roadmap part 4) | 2026-10-02 | [OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions) |
+| The lab uses OptiTrack Motive ([DEC-16](CONTEXT.md#accepted-decisions-made-after-the-proposal)). Which Motive version and streaming settings does it use? motion_capture_tracking supports VICON, Qualisys, OptiTrack, VRPN, NOKOV, FZMotion, and Motion Analysis. [[4]](https://github.com/IMRCLab/motion_capture_tracking) | Hardware team with lab staff (roadmap part 4) | 2026-10-02 | [OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions) |
 | Which USB radio does the lab have: Crazyradio 2.0 or Crazyradio PA? | Hardware team (roadmap part 4) | 2026-10-02 | [OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions) |
 | Which computer builds and flashes the firmware? Does the Ubuntu 24.04 compiler build it? | Roadmap part 5 owner. The owner is open. Assign an owner in Week 4. | 2026-10-18 | [DEC-05](CONTEXT.md#accepted-decisions-made-after-the-proposal) |
 | Which onboard camera, receiver, and stream format supply the video feed? | Software team (roadmap part 6) | 2026-10-18 | [OPEN-09](CONTEXT.md#unknowns-contradictions-and-open-decisions) |
@@ -173,6 +173,12 @@ Record commands, equipment, dependency versions, results, and limitations for ea
 Before each commit and pull request, stage the change and run `python3 scripts/check.py`. The script needs Python 3.10 or later and no packages.
 It checks ignored files, possible secrets, local links and anchors, the example messages, and changed Mermaid diagrams.
 After their configuration files exist, it also runs pytest, `tsc`, and Vitest. [AGENTS.md](AGENTS.md#before-delivery) lists the checks that need judgment.
+
+## Interface mockup
+
+A clickable design mockup of the tablet interface is at [jaz-villanueva/Thesis-UI-Mockup](https://github.com/jaz-villanueva/Thesis-UI-Mockup), published at <https://jaz-villanueva.github.io/Thesis-UI-Mockup/>.
+It is a design prototype, not application code ([DEC-18](CONTEXT.md#accepted-decisions-made-after-the-proposal)). It simulates the flight host, the drones and the Multi-ranger readings in the browser.
+It runs the pinned Gesture Recognizer files from its own copy.
 
 ## Project documentation
 
