@@ -49,7 +49,7 @@ export interface DroneTelemetry {
 export interface Telemetry extends HostHead {
   type: "telemetry";
   ack: { seq: number | null; t_ms: number | null; host_rx_ms: number | null };
-  trial: { id: string; running: boolean; elapsed_ms: number; outcome: Outcome | null; hoops: Record<DroneName, number> } | null;
+  trial: { id: string; running: boolean; elapsed_ms: number; outcome: Outcome | null } | null;
   altitude: { rate: number; blocked_by: DroneName | null; reason: "z_max" | "z_min" | "defensive_hover" | null };
   drones: DroneTelemetry[];
 }
@@ -58,7 +58,8 @@ export interface CourseMessage extends HostHead { type: "course"; config_id: str
 export type Message = Hello | Welcome | Input | TabletEvent | Command | Reply | Telemetry | CourseMessage;
 
 // ---------- checks ----------
-type Shape = { keys: readonly string[]; sub?: Record<string, Shape>; each?: Record<string, Shape> };
+// sub: nested objects, checked field by field; nullable: the nested objects that may be null instead
+type Shape = { keys: readonly string[]; sub?: Record<string, Shape>; nullable?: readonly string[]; each?: Record<string, Shape> };
 const RECT: Shape = { keys: ["x_min", "x_max", "y_min", "y_max"] };
 const COURSE: Shape = {
   keys: ["room", "capture_volume", "restricted_zone", "obstacles", "hoops", "pads"],
@@ -86,15 +87,20 @@ const SHAPES: Record<Message["type"], Shape> = {
   reply: { keys: [...HOST, "ref", "ok", "code", "detail"] },
   telemetry: {
     keys: [...HOST, "ack", "trial", "altitude", "drones"],
+    nullable: ["trial"],
     sub: {
       ack: { keys: ["seq", "t_ms", "host_rx_ms"] },
-      trial: { keys: ["id", "running", "elapsed_ms", "outcome", "hoops"] },
+      trial: { keys: ["id", "running", "elapsed_ms", "outcome"] },
       altitude: { keys: ["rate", "blocked_by", "reason"] },
     },
     each: {
       drones: {
         keys: ["id", "held", "state", "link", "x", "y", "z", "yaw", "pos_age_ms", "cmd", "ranges", "defensive_hover", "battery_v", "battery_level", "pm_state", "can_fly", "tumbled", "health", "link_quality"],
-        sub: { cmd: { keys: ["x", "y", "z"] }, ranges: { keys: ["front", "back", "left", "right", "up"] } },
+        nullable: ["defensive_hover", "health"],
+        sub: {
+          cmd: { keys: ["x", "y", "z"] }, ranges: { keys: ["front", "back", "left", "right", "up"] },
+          defensive_hover: { keys: ["dir", "range"] }, health: { keys: ["motor_pass", "battery_sag_v", "battery_pass", "host_ms"] },
+        },
       },
     },
   },
@@ -113,21 +119,26 @@ const ENUMS: Record<string, readonly (string | null)[]> = {
   "telemetry.drones[].state": ["grounded", "taking_off", "flying", "landing", "stopped"],
   "telemetry.drones[].link": ["ok", "lost"],
   "telemetry.drones[].pm_state": [null, "battery", "charging", "charged", "lowPower", "shutDown"],
+  "telemetry.drones[].defensive_hover.dir": ["front", "back", "left", "right", "up"],
 };
 
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+// own fields only, so inherited names such as "toString" never count as fields
+const has = (o: object, k: string): boolean => Object.hasOwn(o, k);
 
 function checkShape(o: Record<string, unknown>, shape: Shape, path: string, out: string[]): void {
-  for (const k of shape.keys) if (!(k in o)) out.push(`${path}.${k} is missing`);
+  for (const k of shape.keys) if (!has(o, k)) out.push(`${path}.${k} is missing`);
   for (const k of Object.keys(o)) if (!shape.keys.includes(k)) out.push(`${path}.${k} is not a field`);
   for (const [k, sub] of Object.entries(shape.sub ?? {})) {
+    if (!has(o, k)) continue;
     const v = o[k];
-    if (v === null) continue;
-    if (isObj(v)) checkShape(v, sub, `${path}.${k}`, out); else if (k in o) out.push(`${path}.${k} must be an object`);
+    if (v === null && shape.nullable?.includes(k)) continue;
+    if (isObj(v)) checkShape(v, sub, `${path}.${k}`, out);
+    else out.push(`${path}.${k} must be an object${shape.nullable?.includes(k) ? " or null" : ""}`);
   }
   for (const [k, sub] of Object.entries(shape.each ?? {})) {
     const v = o[k];
-    if (!Array.isArray(v)) { if (k in o) out.push(`${path}.${k} must be an array`); continue; }
+    if (!Array.isArray(v)) { if (has(o, k)) out.push(`${path}.${k} must be an array`); continue; }
     v.forEach((e, i) => { if (isObj(e)) checkShape(e, sub, `${path}.${k}[${i}]`, out); else out.push(`${path}.${k}[${i}] must be an object`); });
   }
 }
@@ -142,7 +153,8 @@ function valuesAt(o: unknown, parts: string[]): unknown[] {
   if (!parts.length) return [o];
   const [head, ...rest] = parts as [string, ...string[]];
   const arr = head.endsWith("[]");
-  const v = isObj(o) ? o[arr ? head.slice(0, -2) : head] : undefined;
+  const key = arr ? head.slice(0, -2) : head;
+  const v = isObj(o) && has(o, key) ? o[key] : undefined;
   if (v === undefined) return [];
   if (arr) return Array.isArray(v) ? v.flatMap(e => valuesAt(e, rest)) : [];
   if (v === null && rest.length) return [];
@@ -154,7 +166,7 @@ export function checkMessage(x: unknown): string[] {
   const out: string[] = [];
   if (!isObj(x)) return ["the message is not a JSON object"];
   const type = x["type"];
-  if (typeof type !== "string" || !(type in SHAPES)) return [`unknown type ${JSON.stringify(type)}`];
+  if (typeof type !== "string" || !has(SHAPES, type)) return [`unknown type ${JSON.stringify(type)}`];
   if (x["v"] !== 1) out.push("v must be 1");
   const seq = x["seq"];
   if (typeof seq !== "number" || !Number.isInteger(seq) || seq < 1) out.push("seq must be a positive integer");

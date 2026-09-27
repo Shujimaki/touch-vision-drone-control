@@ -27,7 +27,36 @@ describe("checkMessage rejects", () => {
     t.drones[0]!["mode"] = "course";
     expect(checkMessage(t)).toContain("telemetry.drones[0].mode is not a field");
   });
-  it("mode and set_mode, removed from v1", () => {
+  it("an inherited property name as the type, without throwing", () => {
+    expect(checkMessage({ ...hello(), type: "toString" })).toEqual(['unknown type "toString"']);
+    expect(checkMessage({ ...hello(), type: "__proto__" })).toEqual(['unknown type "__proto__"']);
+  });
+  it("null for a nested object that the protocol requires", () => {
+    const m = { ...load("input-three-drones-climbing.json"), gesture: null };
+    expect(checkMessage(m)).toContain("input.gesture must be an object");
+  });
+  const telem = () => load("telemetry-cf3-defensive-hover.json") as { trial: unknown; drones: Record<string, unknown>[] };
+  it("an extra field in a health result", () => {
+    const t = telem(); (t.drones[0]!["health"] as Record<string, unknown>)["extra"] = 1;
+    expect(checkMessage(t)).toContain("telemetry.drones[0].health.extra is not a field");
+  });
+  it("a defensive hover with an unknown direction", () => {
+    const t = telem(); t.drones[0]!["defensive_hover"] = { dir: "down", range: 0.1 };
+    expect(checkMessage(t)).toContain('telemetry.drones[].defensive_hover.dir has value "down"');
+  });
+  it("set_mode, removed from v1 with mode", () => {
     expect(checkMessage({ ...load("command-takeoff.json"), name: "set_mode" })).toContain('command.name has value "set_mode"');
+  });
+  it("trial.hoops, removed in review", () => {
+    const t = telem(); (t.trial as Record<string, unknown>)["hoops"] = {};
+    expect(checkMessage(t)).toContain("telemetry.trial.hoops is not a field");
+  });
+});
+
+describe("checkMessage accepts", () => {
+  it("null where the protocol allows it (trial, defensive_hover, health)", () => {
+    const t = load("telemetry-cf3-defensive-hover.json") as { trial: unknown; drones: Record<string, unknown>[] };
+    t.trial = null; t.drones[0]!["health"] = null; t.drones[0]!["defensive_hover"] = null;
+    expect(checkMessage(t)).toEqual([]);
   });
 });
