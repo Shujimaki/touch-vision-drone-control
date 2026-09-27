@@ -170,6 +170,10 @@ No application tests exist yet. The implementation needs three levels of checks:
 The [evaluation plan](CONTEXT.md#evaluation-method-and-numerical-targets) defines the study procedure, numerical targets, and scoring rules.
 Record commands, equipment, dependency versions, results, and limitations for each test run.
 
+Before each commit and pull request, stage the change and run `python3 scripts/check.py`. The script needs Python 3.10 or later and no packages.
+It checks ignored files, possible secrets, local links and anchors, the example messages, and changed Mermaid diagrams.
+After their configuration files exist, it also runs pytest, `tsc`, and Vitest. [AGENTS.md](AGENTS.md#before-delivery) lists the checks that need judgment.
+
 ## Project documentation
 
 - Read [CONTEXT.md](CONTEXT.md) for the thesis purpose, requirements, decisions, open questions, and glossary.

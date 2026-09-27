@@ -9,6 +9,7 @@ Read the document that owns the information needed for the task:
 | Build, configure, run, or test the software | [README.md](README.md) owns the software overview, implementation plan, setup, usage, and testing guidance. |
 | Interpret or change thesis behavior, evaluation, or scope | [CONTEXT.md](CONTEXT.md) owns requirements, targets, accepted decisions, unresolved questions, glossary, and thesis sources. |
 | Change the messages between the tablet and the host | [protocol/README.md](protocol/README.md) owns the message fields, units, limits, and examples. |
+| Commit, open a pull request, or merge | [.claude/skills/deliver-change/SKILL.md](.claude/skills/deliver-change/SKILL.md) owns the branch, check, commit, pull request, and merge procedure. |
 | Change agent procedures | This file owns shared project procedures, evidence rules, and delivery checks. |
 | Apply personal communication or writing preferences | Read `.local/AGENTS.personal.md` if it exists. It owns local preferences and personal skill references. |
 
