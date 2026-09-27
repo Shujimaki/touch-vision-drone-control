@@ -124,7 +124,7 @@ The host replies with `welcome`. The tablet sends nothing else until it arrives.
 | Field | Type and allowed values | Meaning |
 |---|---|---|
 | `host_ms` | number | Host clock. |
-| `session` | string | Session identifier. Trial files use it. |
+| `session` | string | Session identifier, unique by date and time, for example `s20260927-101502`. The host stores trial files under it. Trial IDs such as `S1-T2` restart on each run, so they only need to be unique within one session. |
 | `role` | `operator` or `experimenter` | The accepted role. |
 | `config.id` | string | Version of the host configuration file. Trial records store it. |
 | `config.drones` | array of strings | Crazyswarm2 drone names, for example `cf1`. |
@@ -224,7 +224,7 @@ The host sends `telemetry` from a fixed timer. Example: [telemetry-cf3-defensive
 | `host_ms` | number | Host clock when the host built the message. |
 | `ack.seq`, `ack.t_ms` | integer and number, or `null` | `seq` and `t_ms` of the latest valid `input`. |
 | `ack.host_rx_ms` | number or `null` | Host clock when that `input` arrived. |
-| `trial` | `{id, running, elapsed_ms, outcome, hoops}` or `null` | The current or latest trial. `elapsed_ms` comes from the host trial clock. `outcome` is `null` while the trial runs, then `completed`, `collision`, `timeout`, or `hardware_abort`. `hoops` maps each drone to the number of hoops it has passed in order. |
+| `trial` | `{id, running, elapsed_ms, outcome}` or `null` | The current or latest trial. `elapsed_ms` comes from the host trial clock. The host decides the outcome; `outcome` reports that decision to the tablet. It is `null` while the trial runs, then `completed`, `collision`, `timeout`, or `hardware_abort`. |
 | `altitude.rate` | m/s | The shared rate that the host applied at this tick. |
 | `altitude.blocked_by` | drone name or `null` | A held drone that cannot follow the shared rate. |
 | `altitude.reason` | `z_max`, `z_min`, `defensive_hover`, or `null` | The cause of the block. The response to a block is [OPEN-03](../CONTEXT.md#unknowns-contradictions-and-open-decisions). |
@@ -239,10 +239,10 @@ The host sends `telemetry` from a fixed timer. Example: [telemetry-cf3-defensive
 | `drones[].defensive_hover` | `{dir, range}` or `null` | Onboard defensive hover. `dir` is a range direction. It depends on the onboard firmware reporting a flag ([DEC-05](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). |
 | `drones[].battery_v` | volt or `null` | Battery voltage. |
 | `drones[].battery_level` | 0 to 90 in steps of 10, or `null` | Firmware `pm.batteryLevel`, from its LiPo charge curve. |
-| `drones[].pm_state` | `battery`, `charging`, `charged`, `lowPower`, `shutDown`, or `null` | Firmware `pm.state`. `lowPower` follows 5 s below `pm.lowVoltage` (3.2 V by default). |
+| `drones[].pm_state` | `battery`, `charging`, `charged`, `lowPower`, `shutDown`, or `null` | Firmware `pm.state`, the power manager state. `battery` means running normally on battery: not charging and not low. `lowPower` follows 5 s below `pm.lowVoltage` (3.2 V by default). |
 | `drones[].can_fly`, `drones[].tumbled` | boolean or `null` | Firmware `sys.canfly` and `sys.isTumbled`. |
 | `drones[].health` | `{motor_pass, battery_sag_v, battery_pass, host_ms}` or `null` | Latest `health_check` result. `motor_pass` lists four booleans from `health.motorPass`, motors M1 to M4. `battery_sag_v` is `health.batterySag`. `battery_pass` is `true` when the sag is 0.70 V or less. `null` until a check runs. |
-| `drones[].link_quality` | 0 to 100, or `null` | Share of radio packets acknowledged, in %. The tablet shows it as signal bars, as in Figure 1. `null` when the host has no value. |
+| `drones[].link_quality` | 0 to 100, or `null` | Share of radio packets acknowledged, in %, from the cflib link statistics (`link_quality_updated`). The tablet shows it as signal bars, as in Figure 1. `null` when the host has no value. |
 
 ## Timing and failures
 
@@ -306,7 +306,7 @@ The first draft, from 23 September 2026, was an earlier version of [input-three-
 6. Telemetry uses glossary names and measured units. `dh` becomes `defensive_hover`, `battery` becomes `battery_v`, and `stale` becomes `pos_age_ms`. `held`, `ack`, `altitude`, `mode`, and `trial` are new.
 7. The earlier examples used two different origins, (1.20, 0.85) and (−1.45, −1.02). Both were illustrative. The host configuration now supplies the frame.
 
-Changes staged on 27 September 2026, before the prototype freeze: `course`, `layout_read`, `layout_apply`, `health_check`, `drones[].link_quality`, `drones[].battery_level`, `drones[].pm_state`, `drones[].can_fly`, `drones[].tumbled` and `drones[].health` are new. `trial_start` has start conditions. `trial_end` now carries only `collision` or `hardware_abort`, because the host ends completed and timed-out trials itself. `trial.outcome` and `trial.hoops` are new. `mode` and `set_mode` are removed: the restricted zone applies at all times ([DEC-20](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). Sessions and trials use short IDs such as `S1` and `S1-T2`. The example course follows proposal Figure 5, and the example altitude limits follow [DEC-15 and DEC-17](../CONTEXT.md#accepted-decisions-made-after-the-proposal).
+Changes staged on 27 September 2026, before the prototype freeze: `course`, `layout_read`, `layout_apply`, `health_check`, `drones[].link_quality`, `drones[].battery_level`, `drones[].pm_state`, `drones[].can_fly`, `drones[].tumbled` and `drones[].health` are new. `trial_start` has start conditions. `trial_end` now carries only `collision` or `hardware_abort`, because the host ends completed and timed-out trials itself. `trial.outcome` is new. `mode` and `set_mode` are removed: the restricted zone applies at all times ([DEC-20](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). Sessions and trials use short IDs such as `S1` and `S1-T2`. The example course follows proposal Figure 5, and the example altitude limits follow [DEC-15 and DEC-17](../CONTEXT.md#accepted-decisions-made-after-the-proposal).
 
 ## Open items
 
