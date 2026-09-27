@@ -1,0 +1,14 @@
+{
+    "type": "event",
+    "v": 1,
+    "seq": 25107,
+    "t_ms": 842180.9,
+    "name": "restriction_start",
+    "drone": "cf2",
+    "data": {
+        "zone": "RZ",
+        "finger": { "x": 2.112, "y": 1.604 },
+        "candidate": { "x": 2.098, "y": 1.59 },
+        "accepted": { "x": 2.005, "y": 1.588 }
+    }
+}

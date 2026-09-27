@@ -1,0 +1,9 @@
+{
+    "type": "event",
+    "v": 1,
+    "seq": 24212,
+    "t_ms": 812402.3,
+    "name": "release",
+    "drone": "cf2",
+    "data": { "kind": "cancelled", "reason": null }
+}

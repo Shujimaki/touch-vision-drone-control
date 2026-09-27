@@ -1,0 +1,36 @@
+{
+    "type": "telemetry",
+    "v": 1,
+    "seq": 24205,
+    "host_ms": 5203551.0,
+    "ack": { "seq": 24210, "t_ms": 812345.6, "host_rx_ms": 5203537.1 },
+    "mode": "course",
+    "trial": { "id": "P07-TV-2", "running": true, "elapsed_ms": 92418.0 },
+    "altitude": { "rate": 0.0, "blocked_by": "cf3", "reason": "defensive_hover" },
+    "drones": [
+        {
+            "id": "cf1", "held": true, "state": "flying", "link": "ok",
+            "x": 1.184, "y": 0.851, "z": 0.742, "yaw": 1.5, "pos_age_ms": 6.2,
+            "cmd": { "x": 1.2, "y": 0.85, "z": 0.76 },
+            "ranges": { "front": null, "back": 1.18, "left": 2.69, "right": 0.84, "up": 1.8 },
+            "defensive_hover": null,
+            "battery_v": 3.94
+        },
+        {
+            "id": "cf2", "held": true, "state": "flying", "link": "ok",
+            "x": 1.593, "y": 1.396, "z": 0.915, "yaw": -2.0, "pos_age_ms": 6.2,
+            "cmd": { "x": 1.6, "y": 1.4, "z": 0.93 },
+            "ranges": { "front": 3.7, "back": 1.6, "left": 2.15, "right": 1.39, "up": 1.63 },
+            "defensive_hover": null,
+            "battery_v": 3.91
+        },
+        {
+            "id": "cf3", "held": true, "state": "flying", "link": "ok",
+            "x": 3.372, "y": 0.752, "z": 0.603, "yaw": 0.5, "pos_age_ms": 6.2,
+            "cmd": { "x": 3.45, "y": 0.75, "z": 0.61 },
+            "ranges": { "front": 0.23, "back": 3.37, "left": 2.8, "right": 0.75, "up": 1.95 },
+            "defensive_hover": { "dir": "front", "range": 0.23 },
+            "battery_v": 3.88
+        }
+    ]
+}

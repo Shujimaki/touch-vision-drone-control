@@ -1,0 +1,43 @@
+# Personal material and generated records
+/.local/
+/output/
+/data/raw/
+/data/runs/
+
+# Local experiments and sample code
+/scratch/
+/sample_scripts/
+
+# Secrets, with shareable examples
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Dependencies and Python artifacts
+node_modules/
+.venv/
+venv/
+__pycache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Builds, caches, and test output
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+playwright-report/
+test-results/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+.gstack/

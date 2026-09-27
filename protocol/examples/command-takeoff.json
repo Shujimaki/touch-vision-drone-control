@@ -1,0 +1,8 @@
+{
+    "type": "command",
+    "v": 1,
+    "seq": 2690,
+    "t_ms": 94950.2,
+    "name": "takeoff",
+    "args": { "drones": ["cf1", "cf2", "cf3"] }
+}

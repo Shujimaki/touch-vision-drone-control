@@ -1,0 +1,10 @@
+{
+    "type": "reply",
+    "v": 1,
+    "seq": 2688,
+    "host_ms": 4486141.9,
+    "ref": 2690,
+    "ok": false,
+    "code": "not_allowed",
+    "detail": "cf3: radio link lost"
+}
