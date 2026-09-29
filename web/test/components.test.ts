@@ -7,6 +7,7 @@ import { altitudeBars } from "../src/components/altitude";
 import { dronesTable, logView, RANGE_COLS } from "../src/components/telemetry";
 import { gestureStatus, heldAltitude } from "../src/components/panel";
 import { flightState } from "../src/components/videoFeed";
+import { dragTarget } from "../src/zone";
 
 const K = PAL.dark, R = { trig: 0.15, show: 0.60 };
 const view = fitView(900, 800, COURSE.arena);
@@ -94,5 +95,27 @@ describe("formats", () => {
   });
   it("reads the Crazyflie battery curve", () => {
     expect(batteryLevel(4.02)).toBe(80); expect(batteryLevel(3.94)).toBe(60); expect(batteryLevel(2.9)).toBe(0);
+  });
+});
+
+describe("restricted-zone drag check", () => {
+  const z = COURSE.zone, edge = z.x - z.h - z.margin;   // left edge of the zone plus its margin
+  it("stops a drag across the zone at its edge", () => {
+    const r = dragTarget(1.5, z.y, 3.8, z.y, z);
+    expect(r.blocked).toBe(true);
+    expect(r.x).toBeLessThanOrEqual(edge); expect(r.x).toBeGreaterThan(edge - 0.01); expect(r.y).toBeCloseTo(z.y);
+  });
+  it("stops a drag that would end inside the zone", () => {
+    expect(dragTarget(1.5, z.y, z.x, z.y, z).blocked).toBe(true);
+  });
+  it("lets a drag beside the zone through unchanged", () => {
+    expect(dragTarget(1.5, 0.9, 3.8, 0.9, z)).toEqual({ x: 3.8, y: 0.9, blocked: false });
+  });
+  it("lets a drone that starts inside move out", () => {
+    expect(dragTarget(z.x, z.y, z.x, 0.9, z).blocked).toBe(false);
+  });
+  it("draws the rejection on the map while the finger is inside", () => {
+    const [d1] = sampleDrones();
+    expect(droneEntity({ ...d1!, blockPt: [z.x, z.y] }, COURSE, view, K, R)).toContain("DRAG REJECTED: restricted zone");
   });
 });

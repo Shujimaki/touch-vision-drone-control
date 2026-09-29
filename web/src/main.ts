@@ -11,6 +11,7 @@ import { handFrame } from "./components/handCamera";
 import { batteryClass, batteryWidth, feedScene, feedTile, flightState } from "./components/videoFeed";
 import { altitudeCard, dronesTable, healthTable, logView, trialCard } from "./components/telemetry";
 import { gestureStatus, heldAltitude } from "./components/panel";
+import { dragTarget } from "./zone";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -31,6 +32,7 @@ const ui = {
   logSes: "all",
   logTrial: "all",
   settings: { zmin: 0.50, zmax: 1.44, rate: 0.20, dhtrig: 0.15, tlim: 300 },
+  restrict: SAMPLE.trial.restrict,   // drags rejected at the restricted zone, shown in the Trial card
 };
 const log = sampleLog();
 const trials: TrialRecord[] = [{ id: SAMPLE.trial.id, session: SAMPLE.trial.session, t0: SAMPLE.trial.t0, t1: null, outcome: null, dh: 0, restrict: 0 }];
@@ -101,7 +103,7 @@ function renderTelemetry(): void {
   const s = ui.settings, elapsed = SAMPLE.now - SAMPLE.trial.t0;
   byId("telTable").innerHTML = dronesTable(ui.drones, s.dhtrig, 0.60);
   byId("telAlt").innerHTML = altitudeCard(SAMPLE.gesture, SAMPLE.requestedRate, SAMPLE.appliedRate, { min: s.zmin, max: s.zmax }, s.rate);
-  byId("telTrial").innerHTML = trialCard(SAMPLE.trial, elapsed, s.tlim);
+  byId("telTrial").innerHTML = trialCard({ ...SAMPLE.trial, restrict: ui.restrict }, elapsed, s.tlim);
   byId("telHealth").innerHTML = healthTable(ui.drones);
   const lv = logView(log, trials, SAMPLE.sessions, { session: ui.logSes, trial: ui.logTrial }, SAMPLE.now, s.tlim);
   const ses = byId<HTMLSelectElement>("logSes"), tr = byId<HTMLSelectElement>("logView");
@@ -165,15 +167,22 @@ mapSvg.addEventListener("pointermove", e => {
   if (!airborne(d)) return;                                   // a grounded drone can be held, not moved
   if (!p.moved && Math.hypot(e.clientX - p.x0, e.clientY - p.y0) < 6) return;
   p.moved = true;
-  const m = a.margin;
-  d.x = d.tx = clamp(mx, a.xMin + m, a.xMax - m); d.y = d.ty = clamp(my, a.yMin + m, a.yMax - m);
+  const m = a.margin, fx = clamp(mx, a.xMin + m, a.xMax - m), fy = clamp(my, a.yMin + m, a.yMax - m);
+  // the sample trial is running, so drags into the restricted zone are rejected (REQ-08): the drone stops at its edge
+  const to = dragTarget(d.x, d.y, fx, fy, COURSE.zone);
+  if (to.blocked && !d.blockPt) {
+    ui.restrict++; trials[0]!.restrict = ui.restrict;
+    log.push({ t: SAMPLE.now, text: `${U(d.id)} drag rejected: restricted zone`, k: "warn", ses: SAMPLE.trial.session, tr: SAMPLE.trial.id });
+  }
+  d.blockPt = to.blocked ? [fx, fy] : null;
+  d.x = d.tx = to.x; d.y = d.ty = to.y;
   d.ranges = {}; d.below = null;                              // the sample readings belong to the old spot
   renderSoon();
 });
 function release(e: PointerEvent): void {
   const p = pointers.get(e.pointerId);
   if (!p) return;
-  pointers.delete(e.pointerId); drone(p.id).held = false; followVideo(); renderSoon();
+  pointers.delete(e.pointerId); const d = drone(p.id); d.held = false; d.blockPt = null; followVideo(); renderSoon();
 }
 mapSvg.addEventListener("pointerup", release);
 mapSvg.addEventListener("pointercancel", release);

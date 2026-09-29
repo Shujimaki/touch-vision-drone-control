@@ -90,6 +90,12 @@ export function droneEntity(d: Drone, c: Course, v: View, K: Pal, R: Readings): 
     g += `<path d="M${X.toFixed(1)} ${Y.toFixed(1)}L${TX.toFixed(1)} ${TY.toFixed(1)}" fill="none" stroke="url(#${gid})" stroke-width="2.2" stroke-linecap="round"/>`;
     g += `<circle cx="${TX}" cy="${TY}" r="11" fill="${K.own}" fill-opacity=".07"/><circle cx="${TX}" cy="${TY}" r="6" fill="none" stroke="${K.own}" stroke-opacity=".55" stroke-width="1.2"/><circle cx="${TX}" cy="${TY}" r="1.8" fill="${K.own}" fill-opacity=".8"/>`;
   }
+  if (d.blockPt) {   // a drag rejected at the restricted zone: the drone stops at the edge, a red trace points at the finger
+    const BX = px(v, d.blockPt[0]), BY = py(v, d.blockPt[1]), gb = `blk-${d.id}`;
+    g += `<linearGradient id="${gb}" gradientUnits="userSpaceOnUse" x1="${X}" y1="${Y}" x2="${BX}" y2="${BY}"><stop offset="0" stop-color="${K.crit}" stop-opacity=".6"/><stop offset="1" stop-color="${K.crit}" stop-opacity="0"/></linearGradient>`;
+    g += `<path d="M${X} ${Y} L${BX} ${BY}" stroke="url(#${gb})" stroke-width="6" stroke-linecap="round" opacity=".5"/><circle cx="${X}" cy="${Y}" r="${PROX_R + 4}" fill="none" stroke="${K.crit}" stroke-opacity=".7" stroke-width="1.5"/>`;
+    g += `<text x="${X}" y="${Y + PROX_R + 18}" fill="${K.crit}" font-size="10" font-weight="700" text-anchor="middle" ${FONT}>DRAG REJECTED: restricted zone</text>`;
+  }
   g += `<g data-drone="${d.id}" style="cursor:pointer"><circle cx="${X}" cy="${Y}" r="30" fill="transparent"/>`;
   if (airborne(d)) {
     // full ring; each side sensor colours the part facing it, fading around the circle, green -> amber -> red as it nears

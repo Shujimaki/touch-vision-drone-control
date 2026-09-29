@@ -24,6 +24,7 @@ export interface Drone {
   below: { dist: number; what: string } | null;  // clearance below, computed from motion capture and the course
   held: boolean;
   health: Health;
+  blockPt?: [number, number] | null;             // where the finger is while a drag is rejected at the restricted zone
 }
 export interface LogEntry { t: number; text: string; k: LogKind; ses: string; tr: string }
 export interface TrialRecord { id: string; session: string; t0: number; t1: number | null; outcome: string | null; dh: number; restrict: number }
