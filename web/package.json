@@ -1,0 +1,23 @@
+{
+  "name": "touch-vision-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Static mockup of the tablet interface: one captured screen state with UI-only controls.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
+  }
+}
