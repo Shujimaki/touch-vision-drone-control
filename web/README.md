@@ -1,27 +1,30 @@
-# Tablet web app: static mockup
+# Tablet web app: mockup
 
-This folder holds a static mockup of the tablet interface. It shows how the operator sees the system: the map, the hand-camera panel, the altitude bars, the video feed, the flight controls, the Telemetry tab, and Settings.
+This folder holds a mockup of the tablet interface. It shows how the operator sees and uses the system: the map, the hand-camera panel, the altitude bars, the video feed, the flight controls, the Telemetry tab, and Settings. Its layout and look come from the design mockup at [jaz-villanueva/Thesis-UI-Mockup](https://github.com/jaz-villanueva/Thesis-UI-Mockup).
 
-The page is one captured state of the screen:
-
-- DRONE 1 is held and climbing next to obstacle O1, and its proximity ring shows the obstacle on that side.
-- DRONE 2 is flying toward a target.
-- DRONE 3 is on its start pad.
-- A trial is running, and the Telemetry tab shows sample values.
-
-The screen comes from the interactive design mockup at [jaz-villanueva/Thesis-UI-Mockup](https://github.com/jaz-villanueva/Thesis-UI-Mockup), without changes to its layout or look.
+Components in `src/components/` draw fixed sample data from `src/sample.ts`: one moment of a trial, with DRONE 1 held and climbing next to obstacle O1, DRONE 2 flying toward a target, and DRONE 3 on its pad.
 
 ## What responds
 
-Only the controls that change what is shown respond:
+The interface responds to the operator, but only on screen:
 
-- the Map and Telemetry tabs, and the event ticker, which opens Telemetry
-- the Settings drawer
-- the collapsible Hand camera and Video panels
-- the video source buttons 1, 2 and 3
-- Settings → Light mode, and Fullscreen
+- **Map:** hold a drone with a finger and drag it. Several fingers can hold several drones. A grounded drone can be held but not moved. A held drone is drawn filled.
+- **Video:** the feed follows the drone touched most recently while it is held. The buttons 1, 2 and 3 also choose it, and show each drone's battery and signal.
+- **Selected drone:** the Take off / Land button, the held-altitude list, the altitude bars, and the Telemetry tables follow what the operator holds and moves.
+- **Telemetry tab:** the event log filters by participant session, then by trial.
+- **E-STOP:** press and hold for 1 s to see it arm and fire. Take off all resets it.
+- **Hand camera:** the camera icon shows a plain preview of the front camera.
+- **Settings:** the flight-value steppers, Light mode, Left-handed layout, and Fullscreen.
 
-Every other control is part of the picture only. Nothing moves, nothing is simulated, and the page sends no messages. It does not use the message format in [`protocol/`](../protocol/).
+## What it does not do
+
+Nothing is simulated, and nothing is sent:
+
+- no flight, altitude change, sensor readings, collisions, defensive hover, or restricted-zone checks;
+- no gesture recognition, and no trials that start or end;
+- no messages, no connection to a host, and no use of the message format in [`protocol/`](../protocol/).
+
+A dragged drone moves only on the map. Its sample sensor readings belong to its starting spot, so they clear once it moves.
 
 ## Run it
 
@@ -35,4 +38,4 @@ npm ci
 npm run dev
 ```
 
-Open the address that Vite prints. `npm run build` writes a static copy to `dist/`, and `npm test` checks that the markup and the UI script stay in step.
+Open the address that Vite prints. `npm run build` writes a static copy to `dist/`, and `npm test` checks the components and that the page and the script stay in step.

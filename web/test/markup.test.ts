@@ -1,5 +1,5 @@
-// The static mockup is one HTML file plus a small UI script. These checks keep the two in step and keep the mockup
-// static: every element the script uses exists, ids are unique, both themes are drawn, and nothing else runs.
+// The mockup is one HTML page plus a UI script. These checks keep the two in step and keep the page a mockup:
+// every element the script uses exists, ids are unique, and nothing but the UI script runs.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -9,29 +9,20 @@ const html = readFileSync(join(web, "index.html"), "utf8");
 const script = readFileSync(join(web, "src", "main.ts"), "utf8");
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]!);
 
-describe("static mockup markup", () => {
-  it("has every element the UI script looks up", () => {
-    const used = [...script.matchAll(/byId\("([^"]+)"\)/g)].map(m => m[1]!);
+describe("mockup page", () => {
+  it("has every element the UI script looks up by a fixed id", () => {
+    const used = [...script.matchAll(/byId(?:<[^>]+>)?\("([^"]+)"\)/g)].map(m => m[1]!);
     expect(used.length).toBeGreaterThan(0);
     for (const id of used) expect(ids, `#${id}`).toContain(id);
   });
   it("uses each id once", () => {
-    const dups = ids.filter((id, i) => ids.indexOf(id) !== i);
-    expect(dups).toEqual([]);
-  });
-  it("draws the map, altitude bars, hand camera and all three drone feeds in both themes", () => {
-    for (const id of ["mapSvg", "tapeSvg", "camSvg", "fv-cf1", "fv-cf2", "fv-cf3"]) {
-      const start = html.indexOf(`id="${id}"`);
-      const svg = html.slice(start, html.indexOf("</svg>", html.indexOf('class="th-l"', start)));
-      expect(svg, id).toContain('class="th-d"');
-      expect(svg, id).toContain('class="th-l"');
-    }
+    expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
   });
   it("runs no script except the UI script", () => {
-    const scripts = [...html.matchAll(/<script\b[^>]*>/g)].map(m => m[0]);
-    expect(scripts).toEqual(['<script type="module" src="/src/main.ts">']);
+    expect([...html.matchAll(/<script\b[^>]*>/g)].map(m => m[0])).toEqual(['<script type="module" src="/src/main.ts">']);
   });
-  it("points each light-theme reference at a light-theme id", () => {
-    for (const m of html.matchAll(/url\(#([^)]+)\)/g)) expect(ids, m[1]).toContain(m[1]!);
+  it("sends nothing and simulates nothing", () => {
+    const all = [script, ...["map", "altitude", "handCamera", "videoFeed", "telemetry", "panel"].map(f => readFileSync(join(web, "src", "components", f + ".ts"), "utf8"))].join("\n");
+    for (const banned of ["WebSocket", "fetch(", "XMLHttpRequest", "serviceWorker", "setInterval"]) expect(all, banned).not.toContain(banned);
   });
 });

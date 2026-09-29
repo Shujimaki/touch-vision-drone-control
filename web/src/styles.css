@@ -534,15 +534,3 @@ html:has(.app[data-mode="compact"]),html:has(.app[data-mode="compact"]) body{ove
 .dot{width:8px;height:8px;border-radius:50%;background:var(--tx-3)}
 .dot[data-k="ok"]{background:var(--friend)} .dot[data-k="warn"]{background:var(--caut)} .dot[data-k="crit"]{background:var(--crit)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-
-/* =====================================================================
-   STATIC MOCKUP
-   ===================================================================== */
-/* each drawing holds both themes; show the one that matches the page theme */
-.th-l{display:none}
-:root.light .th-d{display:none}
-:root.light .th-l{display:inline}
-/* portrait: map on top, panel and altitude below (the interactive version set this from script) */
-@media (orientation:portrait){
-  #app.app{grid-template-rows:minmax(0,.8fr) minmax(0,1.2fr)!important;grid-template-columns:clamp(56px,6vw,90px) minmax(0,1fr)!important;grid-template-areas:"main main" "alt side"!important}
-}
