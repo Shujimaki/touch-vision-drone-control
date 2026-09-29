@@ -1,1 +1,5 @@
-/protocol/ @romero-jm @jaz-villanueva @Shujimaki
+# Any collaborator can review. One approval is enough to merge.
+# A protocol/ change needs one approval from the hardware team and one
+# from the software team. GitHub cannot enforce this rule, so step 7 of
+# the deliver-change skill enforces it.
+* @Shujimaki @jaz-villanueva @romero-jm @ronboopsh
