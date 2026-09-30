@@ -114,6 +114,25 @@ describe("restricted-zone drag check", () => {
   it("lets a drone that starts inside move out", () => {
     expect(dragTarget(z.x, z.y, z.x, 0.9, z).blocked).toBe(false);
   });
+  it("never lets a drone into the zone or its margin, over many drags in small steps and big jumps", () => {
+    const outer = z.h + z.margin, inMargin = (x: number, y: number) => Math.abs(x - z.x) < outer && Math.abs(y - z.y) < outer;
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (const steps of [1, 8]) {                    // 1: the finger jumps; 8: pointer events in small steps
+      for (let run = 0; run < 300; run++) {
+        let x = 0.4 + rnd() * 4.5, y = 0.4 + rnd() * 2.7;
+        if (inMargin(x, y)) continue;
+        for (let move = 0; move < 20; move++) {
+          const fx = 0.3 + rnd() * 4.7, fy = 0.3 + rnd() * 2.9;
+          for (let k = 1; k <= steps; k++) {
+            const r = dragTarget(x, y, x + (fx - x) * k / steps, y + (fy - y) * k / steps, z);
+            x = r.x; y = r.y;
+            expect(inMargin(x, y)).toBe(false);
+          }
+        }
+      }
+    }
+  });
   it("draws the rejection on the map while the finger is inside", () => {
     const [d1] = sampleDrones();
     expect(droneEntity({ ...d1!, blockPt: [z.x, z.y] }, COURSE, view, K, R)).toContain("DRAG REJECTED: restricted zone");
