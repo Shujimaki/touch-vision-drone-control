@@ -25,6 +25,8 @@ export interface Drone {
   held: boolean;
   health: Health;
   blockPt?: [number, number] | null;             // where the finger is while a drag is rejected at the restricted zone
+  gliding?: boolean;                              // moving on screen toward a target the operator dragged to
+  trail?: [number, number, number][];             // recent on-screen positions [x, y, ms], drawn as a fading trail
 }
 export interface LogEntry { t: number; text: string; k: LogKind; ses: string; tr: string }
 export interface TrialRecord { id: string; session: string; t0: number; t1: number | null; outcome: string | null; dh: number; restrict: number }

@@ -5,13 +5,14 @@ import "./styles.css";
 import { COURSE, SAMPLE, sampleDrones, sampleLog, type TrialRecord } from "./sample";
 import { PAL, type Pal } from "./theme";
 import { U, batteryLevel, clamp, fmtMS, sg } from "./format";
-import { airborne, courseLayer, droneLayer, fitView, toCourse, type View } from "./components/map";
+import { TRAIL_MS, airborne, courseLayer, droneLayer, fitView, toCourse, type View } from "./components/map";
 import { altitudeBars } from "./components/altitude";
 import { handFrame } from "./components/handCamera";
 import { batteryClass, batteryWidth, feedScene, feedTile, flightState } from "./components/videoFeed";
 import { altitudeCard, dronesTable, healthTable, logView, trialCard } from "./components/telemetry";
 import { gestureStatus, heldAltitude } from "./components/panel";
 import { dragTarget } from "./zone";
+import { glideStep } from "./glide";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -52,7 +53,7 @@ function renderCourse(): void {
   byId("scaleBar").style.width = view.SC.toFixed(0) + "px";
   byId("mapStatic").innerHTML = courseLayer(course(), view, K);
 }
-const renderDrones = () => { byId("mapDyn").innerHTML = droneLayer(ui.drones, course(), view, K, readings()); };
+const renderDrones = () => { byId("mapDyn").innerHTML = droneLayer(ui.drones, course(), view, K, readings(), performance.now()); };
 
 function renderTapes(): void {
   const svg = byId("tapeSvg"), r = svg.getBoundingClientRect(), TW = Math.max(60, r.width), TH = Math.max(200, r.height);
@@ -168,17 +169,40 @@ mapSvg.addEventListener("pointermove", e => {
   if (!p.moved && Math.hypot(e.clientX - p.x0, e.clientY - p.y0) < 6) return;
   p.moved = true;
   const m = a.margin, fx = clamp(mx, a.xMin + m, a.xMax - m), fy = clamp(my, a.yMin + m, a.yMax - m);
-  // the sample trial is running, so drags into the restricted zone are rejected (REQ-08): the drone stops at its edge
-  const to = dragTarget(d.x, d.y, fx, fy, COURSE.zone);
+  // the finger sets the drone's target and the drone glides to it (REQ-02). The sample trial is running, so neither the
+  // target nor the straight line the drone takes to it may enter the restricted zone (REQ-08)
+  const aim = dragTarget(d.tx, d.ty, fx, fy, COURSE.zone), path = dragTarget(d.x, d.y, aim.x, aim.y, COURSE.zone);
+  const to = { x: path.x, y: path.y, blocked: aim.blocked || path.blocked };
   if (to.blocked && !d.blockPt) {
     ui.restrict++; trials[0]!.restrict = ui.restrict;
     log.push({ t: SAMPLE.now, text: `${U(d.id)} drag rejected: restricted zone`, k: "warn", ses: SAMPLE.trial.session, tr: SAMPLE.trial.id });
   }
   d.blockPt = to.blocked ? [fx, fy] : null;
-  d.x = d.tx = to.x; d.y = d.ty = to.y;
+  d.tx = to.x; d.ty = to.y; d.gliding = true;
   d.ranges = {}; d.below = null;                              // the sample readings belong to the old spot
-  renderSoon();
+  startGlide();
 });
+// Screen animation only: a dragged drone eases toward its target, up to 1 m/s, leaving a short fading trail.
+// A released drone keeps its last target and stays there once it arrives (REQ-07).
+let gliding = false, lastFrame = 0, lastPanels = 0;
+function startGlide(): void {
+  if (gliding) return;
+  gliding = true; lastFrame = performance.now(); requestAnimationFrame(glide);
+}
+function glide(now: number): void {
+  const dt = Math.min(0.05, Math.max(0, now - lastFrame) / 1000);
+  lastFrame = now;
+  let busy = false;
+  for (const d of ui.drones) {
+    const T = (d.trail ??= []);
+    while (T.length && now - T[0]![2] > TRAIL_MS) T.shift();
+    if (T.length) busy = true;
+    if (glideStep(d, dt, now)) busy = true;
+  }
+  renderDrones();
+  if (now - lastPanels > 100) { lastPanels = now; renderSoon(); }   // panels follow at about 10 per second
+  if (busy) requestAnimationFrame(glide); else { gliding = false; renderSoon(); }
+}
 function release(e: PointerEvent): void {
   const p = pointers.get(e.pointerId);
   if (!p) return;

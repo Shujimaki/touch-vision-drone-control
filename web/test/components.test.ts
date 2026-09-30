@@ -8,6 +8,7 @@ import { dronesTable, logView, RANGE_COLS } from "../src/components/telemetry";
 import { gestureStatus, heldAltitude } from "../src/components/panel";
 import { flightState } from "../src/components/videoFeed";
 import { dragTarget } from "../src/zone";
+import { MAX_SPEED, glideStep } from "../src/glide";
 
 const K = PAL.dark, R = { trig: 0.15, show: 0.60 };
 const view = fitView(900, 800, COURSE.arena);
@@ -136,5 +137,28 @@ describe("restricted-zone drag check", () => {
   it("draws the rejection on the map while the finger is inside", () => {
     const [d1] = sampleDrones();
     expect(droneEntity({ ...d1!, blockPt: [z.x, z.y] }, COURSE, view, K, R)).toContain("DRAG REJECTED: restricted zone");
+  });
+});
+
+describe("drag glide (screen animation)", () => {
+  it("moves a dragged drone to its target at no more than 1 m/s, leaving a trail", () => {
+    const d = { ...sampleDrones()[1]!, tx: 4.0, ty: 0.5, gliding: true, trail: [] as [number, number, number][] };
+    let now = 0, frames = 0, prev = [d.x, d.y];
+    while (glideStep(d, 1 / 60, now += 1000 / 60) && frames < 1000) {
+      frames++;
+      expect(Math.hypot(d.x - prev[0]!, d.y - prev[1]!)).toBeLessThanOrEqual(MAX_SPEED / 60 + 1e-9);
+      prev = [d.x, d.y];
+    }
+    expect(d.x).toBeCloseTo(4.0, 3); expect(d.y).toBeCloseTo(0.5, 3); expect(d.gliding).toBe(false);
+    expect(d.trail.length).toBeGreaterThan(10);
+    expect(frames / 60).toBeLessThan(5);   // about 2.1 m, arriving within a few seconds
+  });
+  it("leaves a drone that was not dragged where it is", () => {
+    const d = sampleDrones()[1]!, x = d.x;
+    expect(glideStep(d, 1 / 60, 0)).toBe(false); expect(d.x).toBe(x);
+  });
+  it("ignores a negative first frame time", () => {
+    const d = { ...sampleDrones()[1]!, tx: 4.0, gliding: true }, x = d.x;
+    glideStep(d, -0.01, 0); expect(d.x).toBe(x);
   });
 });
