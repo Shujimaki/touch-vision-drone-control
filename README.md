@@ -5,8 +5,9 @@ The application combines touch positioning, hand gestures for altitude control, 
 
 ## Current status
 
-The project is in planning. This repository contains documentation but no application code, dependency definitions, lockfiles, or automated tests.
-There is no runnable application yet. The repository contains no hardware compatibility or flight-performance test results.
+The project is in early development. The repository contains a tablet UI mockup in [web/](web/README.md) and the first part of the command bridge in [bridge/](bridge/README.md).
+The bridge streams OptiTrack positions of the drones, obstacles, and hoops to the mockup map ([DEC-13](CONTEXT.md#accepted-decisions-made-after-the-proposal)). It has no flight link.
+Its tests use synthetic positions. The repository contains no hardware compatibility, lab motion-capture, or flight-performance test results.
 
 This README describes the planned software architecture, setup needs, dependencies, development steps, and tests.
 [CONTEXT.md](CONTEXT.md) defines the thesis requirements, accepted decisions, evaluation method, and glossary.
@@ -41,7 +42,7 @@ The front camera reads the hand. Motion capture measures drone positions. The se
 
 ## Setup and usage
 
-Installation and launch commands are not available yet. Setup instructions will follow the first runnable build and dependency definitions.
+[web/README.md](web/README.md) and [bridge/README.md](bridge/README.md) give the install and launch commands for the mockup and the position bridge. The bridge README also lists the Motive settings for live positions. Flight setup will follow the flight link.
 The planned environments have these roles:
 
 | Environment | Purpose and setup needs |
@@ -74,7 +75,7 @@ This table gives one choice for each layer of the stack. The next table gives th
 | Tablet to host | JSON messages over WebSocket, on HTTPS and WSS, with mkcert certificates. No message library. | [protocol/README.md](protocol/README.md) defines the messages. The software team accepted them as [DEC-11](CONTEXT.md#accepted-decisions-made-after-the-proposal). Hardware team review is pending. The transport tools are recommendations. |
 | Command bridge | Python 3.12, uv, aiohttp, Pydantic, pytest, and pytest-aiohttp | Recommendation. |
 | Flight host | Ubuntu 24.04, ROS 2 Jazzy, and Crazyswarm2 | [REC-01](CONTEXT.md#accepted-decisions-made-after-the-proposal), accepted 23 September 2026. The host computer is an open question. |
-| Motion capture | motion_capture_tracking | The lab system is an open question ([OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions)). |
+| Motion capture | OptiTrack Motive over NatNet. The bridge reads it with `motioncapture` 1.1. The ROS path uses motion_capture_tracking, which wraps the same library. | The vendor is [DEC-13](CONTEXT.md#accepted-decisions-made-after-the-proposal). The Motive version is unrecorded ([OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions)). The direct bridge reader is a recommendation. |
 | Drone firmware | Crazyflie firmware plus custom C obstacle stop, built with the Ubuntu 24.04 ARM compiler | [DEC-05](CONTEXT.md#accepted-decisions-made-after-the-proposal). The compiler choice is a recommendation. |
 | Video feed | Unknown | Open question ([OPEN-09](CONTEXT.md#unknowns-contradictions-and-open-decisions)). |
 | Trial records | CSV and JSON files, written with the Python standard library | Recommendation. |
@@ -87,6 +88,7 @@ This table gives one choice for each layer of the stack. The next table gives th
 | Robotics framework | ROS 2 Jazzy Jalisco (2024-05-23, end of life May 2029) | It connects the flight components. [[5]](https://docs.ros.org/en/jazzy/Releases.html) |
 | Application language | Python 3.12 (3.12.0 released 2023-10-02) | The ROS environment needs a matching system interpreter. [[3]](https://imrclab.github.io/crazyswarm2/installation.html) [[6]](https://github.com/ros2/ros2_documentation/blob/jazzy/source/How-To-Guides/Using-Python-Packages.rst) [[48]](https://www.python.org/downloads/release/python-3120/) |
 | Drone control | Crazyswarm2 1.0.7 (2026-08-21), ROS package `ros-jazzy-crazyflie` 1.0.7-1 (built 2026-09-03), C++ backend | This replaces the original Crazyswarm recommendation. The ROS apt repository serves this package for Ubuntu 24.04. [[7]](https://github.com/IMRCLab/crazyswarm2/releases/tag/1.0.7) [[8]](https://github.com/ros2-gbp/crazyswarm2-release) [[43]](http://packages.ros.org/ros2/ubuntu/dists/noble/main/binary-amd64/Packages.gz) |
+| Motion-capture reader | motioncapture 1.1 (2026-07-17), the Python binding of libmotioncapture | The bridge reads OptiTrack with it on Windows, Linux, or macOS, without ROS. It has wheels for Python 3.9 to 3.13. Checked 30 September 2026. [[49]](https://pypi.org/project/motioncapture/) |
 | Tracking bridge | motion_capture_tracking 1.0.9 (2026-06-29), ROS package `ros-jazzy-motion-capture-tracking` 1.0.9-1 (built 2026-09-03) | The 17 September record named 1.0.6-1. The ROS distribution file and apt repository now give 1.0.9-1. The final choice depends on laboratory equipment. [[4]](https://github.com/IMRCLab/motion_capture_tracking) [[9]](https://github.com/ros/rosdistro/blob/master/jazzy/distribution.yaml) [[43]](http://packages.ros.org/ros2/ubuntu/dists/noble/main/binary-amd64/Packages.gz) |
 | Web server | aiohttp 3.14.3 (2026-07-23) | It serves files and exchanges command messages. [[10]](https://pypi.org/project/aiohttp/) |
 | Browser interface | TypeScript 6.0.3 (2026-04-16), HTML, CSS, ES modules, Canvas 2D, Pointer Events | TypeScript 7.0.2 (2026-07-08) is newer, but it has no programmatic API before 7.1. Vite's own TypeScript starter pins `~6.0.2`. Upgrade after 7.1. [[37]](https://registry.npmjs.org/typescript/6.0.3) [[38]](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0-rc/) [[39]](https://github.com/vitejs/vite/blob/main/packages/create-vite/template-vanilla-ts/package.json) [[11]](https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events/Using_Pointer_Events) |
@@ -120,7 +122,7 @@ Each owner comes from the [ROADMAP.md software parts](ROADMAP.md#software-parts)
 | Question | Owner | Needed by | Label |
 |---|---|---|---|
 | Which computer is the flight host, and what is its processor architecture? | Hardware team (roadmap part 4) | 2026-10-02 | [OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions) |
-| Which motion-capture vendor, software version, and protocol does the lab use? motion_capture_tracking supports VICON, Qualisys, OptiTrack, VRPN, NOKOV, FZMotion, and Motion Analysis. [[4]](https://github.com/IMRCLab/motion_capture_tracking) | Hardware team with lab staff (roadmap part 4) | 2026-10-02 | [OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions) |
+| Which Motive version runs in the lab, on which computer, and where is the Motive origin in the course frame? The vendor is OptiTrack ([DEC-13](CONTEXT.md#accepted-decisions-made-after-the-proposal)). | Hardware team with lab staff (roadmap part 4) | 2026-10-02 | [OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions) |
 | Which USB radio does the lab have: Crazyradio 2.0 or Crazyradio PA? | Hardware team (roadmap part 4) | 2026-10-02 | [OPEN-08](CONTEXT.md#unknowns-contradictions-and-open-decisions) |
 | Which computer builds and flashes the firmware? Does the Ubuntu 24.04 compiler build it? | Roadmap part 5 owner. The owner is open. Assign an owner in Week 4. | 2026-10-18 | [DEC-05](CONTEXT.md#accepted-decisions-made-after-the-proposal) |
 | Which onboard camera, receiver, and stream format supply the video feed? | Software team (roadmap part 6) | 2026-10-18 | [OPEN-09](CONTEXT.md#unknowns-contradictions-and-open-decisions) |
@@ -161,7 +163,7 @@ Identify the equipment in each calibration record. Setup commands will follow ap
 
 ## Testing
 
-No application tests exist yet. The implementation needs three levels of checks:
+The web mockup and the bridge have unit tests. They run with synthetic positions and do not test lab equipment. The implementation needs three levels of checks:
 
 - Use the mock connection to check command fields, limits, input state, and trial records against the [control requirements](CONTEXT.md#required-interactions-and-control-behavior).
 - Use the physical tablet to check camera access, three touch contacts, gestures, and video together.
@@ -237,3 +239,4 @@ Moving branches and package pages support research claims. Record fixed revision
 46. [pytest-aiohttp 1.1.1 on PyPI, 2026-06-07](https://pypi.org/project/pytest-aiohttp/).
 47. [Ubuntu LTS release metadata, 24.04 released 2024-04-25, checked 2026-09-23](https://changelogs.ubuntu.com/meta-release-lts).
 48. [Python 3.12.0 release page, 2023-10-02](https://www.python.org/downloads/release/python-3120/).
+49. [motioncapture 1.1 on PyPI, 2026-07-17, checked 2026-09-30](https://pypi.org/project/motioncapture/).

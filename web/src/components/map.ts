@@ -53,24 +53,27 @@ export function courseLayer(c: Course, v: View, K: Pal): string {
     <pattern id="boxHatch" width="7" height="7" patternUnits="userSpaceOnUse"><path d="M0 7L7 0" stroke="${K.boxLine}" stroke-opacity=".35" stroke-width="1.2"/></pattern></defs>`;
   for (const b of c.boxes) {
     const x = X(b.x - b.hx), y = Y(b.y + b.hy), W = 2 * b.hx * SC, H = 2 * b.hy * SC;
+    if (b.stale) g += `<g opacity=".45">`;   // live mode, no fresh pose: drawn at its configured place
     g += `<rect x="${x + 4}" y="${y + 4}" width="${W}" height="${H}" fill="#000" opacity=".35"/>`;
     g += `<rect x="${x}" y="${y}" width="${W}" height="${H}" fill="${K.boxFill}" stroke="${K.boxLine}" stroke-width="1.5"/><rect x="${x}" y="${y}" width="${W}" height="${H}" fill="url(#boxHatch)"/>`;
     g += `<text x="${X(b.x)}" y="${Y(b.y) - 2}" fill="${K.tx}" font-size="11" font-weight="700" text-anchor="middle" ${FONT}>${b.id}</text>`;
     g += `<text x="${X(b.x)}" y="${Y(b.y) + 11}" fill="${K.tx2}" font-size="9" text-anchor="middle">${b.h.toFixed(2)} m</text>`;
+    if (b.stale) g += `</g>`;
   }
   for (const h of c.hoops) {
     const label = `${h.id}<tspan fill="${K.selDim}" font-weight="400" font-size="9" dx="4">${h.z.toFixed(2)} m</tspan>`;
+    g += h.stale ? `<g opacity=".45">` : `<g>`;   // live mode, no fresh pose: drawn at its configured place
     if (h.horizontal) {
       const cx = X(h.x), cy = Y(h.y), r = h.r * SC;
       g += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${K.sel}" fill-opacity=".06" stroke="${K.sel}" stroke-width="3.5"/><circle cx="${cx}" cy="${cy}" r="2.5" fill="${K.sel}"/>`;
-      g += `<text x="${cx}" y="${cy - r - 8}" fill="${K.sel}" font-size="11" font-weight="700" text-anchor="middle" ${FONT}>${label}</text>`;
+      g += `<text x="${cx}" y="${cy - r - 8}" fill="${K.sel}" font-size="11" font-weight="700" text-anchor="middle" ${FONT}>${label}</text></g>`;
       continue;
     }
     const an = h.ang * Math.PI / 180, ux = Math.cos(an), uy = Math.sin(an), x1 = X(h.x - ux * h.r), y1 = Y(h.y - uy * h.r), x2 = X(h.x + ux * h.r), y2 = Y(h.y + uy * h.r), cx = X(h.x), cy = Y(h.y), nx = -uy, ny = ux, L = 16;
     g += `<line x1="${cx - nx * L}" y1="${cy + ny * L}" x2="${cx + nx * L}" y2="${cy - ny * L}" stroke="${K.sel}" stroke-opacity=".5" stroke-dasharray="3 3"/>`;
     g += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${K.sel}" stroke-width="4" stroke-linecap="round"/>`;
     g += `<circle cx="${x1}" cy="${y1}" r="4" fill="${K.tagBg}" stroke="${K.sel}" stroke-width="2"/><circle cx="${x2}" cy="${y2}" r="4" fill="${K.tagBg}" stroke="${K.sel}" stroke-width="2"/>`;
-    g += `<text x="${cx + nx * 22}" y="${cy - ny * 22 + (ny > 0.5 ? 0 : 4)}" fill="${K.sel}" font-size="11" font-weight="700" text-anchor="${nx < -0.5 ? "end" : nx > 0.5 ? "start" : "middle"}" ${FONT}>${label}</text>`;
+    g += `<text x="${cx + nx * 22}" y="${cy - ny * 22 + (ny > 0.5 ? 0 : 4)}" fill="${K.sel}" font-size="11" font-weight="700" text-anchor="${nx < -0.5 ? "end" : nx > 0.5 ? "start" : "middle"}" ${FONT}>${label}</text></g>`;
   }
   const z = c.zone, s0 = z.h * SC, B = z.margin;
   g += `<rect x="${X(z.x - z.h - B)}" y="${Y(z.y + z.h + B)}" width="${2 * (z.h + B) * SC}" height="${2 * (z.h + B) * SC}" fill="none" stroke="${K.tx}" stroke-opacity=".18" stroke-dasharray="2 4"/>`;
@@ -96,7 +99,7 @@ export function droneEntity(d: Drone, c: Course, v: View, K: Pal, R: Readings): 
     g += `<path d="M${X} ${Y} L${BX} ${BY}" stroke="url(#${gb})" stroke-width="6" stroke-linecap="round" opacity=".5"/><circle cx="${X}" cy="${Y}" r="${PROX_R + 4}" fill="none" stroke="${K.crit}" stroke-opacity=".7" stroke-width="1.5"/>`;
     g += `<text x="${X}" y="${Y + PROX_R + 18}" fill="${K.crit}" font-size="10" font-weight="700" text-anchor="middle" ${FONT}>DRAG REJECTED: restricted zone</text>`;
   }
-  g += `<g data-drone="${d.id}" style="cursor:pointer"><circle cx="${X}" cy="${Y}" r="30" fill="transparent"/>`;
+  g += `<g data-drone="${d.id}" style="cursor:pointer"${d.stale ? ' opacity=".35"' : ""}><circle cx="${X}" cy="${Y}" r="30" fill="transparent"/>`;
   if (airborne(d)) {
     // full ring; each side sensor colours the part facing it, fading around the circle, green -> amber -> red as it nears
     const N = 72, FALL = 55 * Math.PI / 180, pt = (a: number) => `${(X + PROX_R * Math.cos(a)).toFixed(1)} ${(Y + PROX_R * Math.sin(a)).toFixed(1)}`;

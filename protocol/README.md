@@ -2,7 +2,7 @@
 
 **Status: Version 1, accepted by the software team on 27 September 2026 as [DEC-11](../CONTEXT.md#accepted-decisions-made-after-the-proposal).** The hardware team must still review it. The [ROADMAP.md](../ROADMAP.md#decisions-that-block-work) deadline is 2026-09-28.
 Placeholder values and the [open items](#open-items) remain open. The trial-record note is a recommendation.
-No code implements these messages yet. No test has checked them.
+The [bridge](../bridge/README.md) implements `hello`, `welcome`, `reply`, and `telemetry` with motion-capture positions only. Its tests check these messages against the examples. No code implements the rest yet.
 
 This file owns the message fields, units, and limits between the tablet web app and the Python command bridge.
 [CONTEXT.md](../CONTEXT.md) owns the behavior requirements. [README.md](../README.md) owns the software architecture.
@@ -22,7 +22,7 @@ Discrete events and commands travel between these snapshots on the same connecti
 | `event` | Tablet to host | When it occurs | Record detail that the snapshots cannot show, such as a release reason or a restriction trigger. |
 | `command` | Tablet to host | When the operator or experimenter asks | Request a discrete host action, such as takeoff or trial start. |
 | `reply` | Host to tablet | After each `command`, or after an invalid message | Accept or reject a message, with a reason code. |
-| `telemetry` | Host to tablet | Fixed rate, 30 Hz by default | Report measured and commanded state for each drone, the applied altitude rate, and the trial state. |
+| `telemetry` | Host to tablet | Fixed rate, 30 Hz by default | Report measured and commanded state for each drone, measured obstacle and hoop positions, the applied altitude rate, and the trial state. |
 
 ```mermaid
 sequenceDiagram
@@ -133,8 +133,8 @@ The host replies with `welcome`. The tablet sends nothing else until it arrives.
 | `config.z_min`, `config.z_max` | m | Flight altitude limits. The values are placeholders ([OPEN-01, OPEN-02](../CONTEXT.md#unknowns-contradictions-and-open-decisions)). |
 | `config.zone_margin` | m | The tablet keeps accepted targets at least this distance outside the restricted zone. The value is a placeholder. |
 | `config.course.room`, `.capture_volume`, `.restricted_zone` | rectangle `{x_min, x_max, y_min, y_max}` | Map extent, usable capture volume, and restricted zone. |
-| `config.course.obstacles` | array of `{id, x_min, x_max, y_min, y_max, height}` | Physical obstacles O1 and O2. |
-| `config.course.hoops` | array of `{id, x, y, z, diameter, plane, yaw}` | Hoops H1 to H3. `plane` is `horizontal` or `vertical`. |
+| `config.course.obstacles` | array of `{id, x_min, x_max, y_min, y_max, height}` | Physical obstacles O1 and O2: their size and planned position. Telemetry gives the measured position in `obstacles`. |
+| `config.course.hoops` | array of `{id, x, y, z, diameter, plane, yaw}` | Hoops H1 to H3 and their planned poses. `plane` is `horizontal` or `vertical`. `yaw` gives the direction of the hoop's horizontal diameter. Telemetry gives the measured pose in `hoops`. |
 | `config.course.pads` | array of `{id, x, y}` | Start position of each drone. |
 
 ### `input`
@@ -236,6 +236,19 @@ The host sends `telemetry` from a fixed timer. Example: [telemetry-cf3-defensive
 | `drones[].ranges` | `{front, back, left, right, up}` in m | Multi-ranger readings, relative to the drone body. |
 | `drones[].defensive_hover` | `{dir, range}` or `null` | Onboard defensive hover. `dir` is a range direction. It depends on the onboard firmware reporting a flag ([DEC-05](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). |
 | `drones[].battery_v` | volt or `null` | Battery voltage. |
+| `obstacles` | array, one entry for each obstacle in `config.course.obstacles` | Measured obstacle poses from motion capture. |
+| `obstacles[].id` | obstacle id from `config.course.obstacles` | For example `O1`. |
+| `obstacles[].x`, `.y`, `.z`, `.yaw` | m and degree, or `null` | Latest pose of the obstacle's rigid body. `x` and `y` give the footprint centre. `null` before the first pose, or when the obstacle is not tracked. |
+| `obstacles[].pos_age_ms` | number or `null` | Age of that pose. The pose is stale above `config.stale_position_ms`. |
+
+| `hoops` | array, one entry for each hoop in `config.course.hoops` | Measured hoop poses from motion capture. |
+| `hoops[].id` | hoop id from `config.course.hoops` | For example `H1`. |
+| `hoops[].x`, `.y`, `.z`, `.yaw` | m and degree, or `null` | Latest pose of the hoop's rigid body. `x`, `y`, and `z` give the ring centre. `yaw` gives the direction of the horizontal diameter, as in `config.course.hoops`. `null` before the first pose, or when the hoop is not tracked. |
+| `hoops[].pos_age_ms` | number or `null` | Age of that pose. The pose is stale above `config.stale_position_ms`. |
+
+The tablet draws each obstacle with the footprint size and height from `config.course.obstacles`, centred on the measured `x` and `y`.
+It draws each hoop with the diameter and plane from `config.course.hoops`, at the measured centre and yaw.
+While an obstacle or hoop has no fresh pose, the tablet draws it at its configured place.
 
 ## Timing and failures
 
@@ -287,13 +300,17 @@ The first draft, from 23 September 2026, was an earlier version of [input-three-
 6. Telemetry uses glossary names and measured units. `dh` becomes `defensive_hover`, `battery` becomes `battery_v`, and `stale` becomes `pos_age_ms`. `held`, `ack`, `altitude`, `mode`, and `trial` are new.
 7. The earlier examples used two different origins, (1.20, 0.85) and (−1.45, −1.02). Both were illustrative. The host configuration now supplies the frame.
 
+On 30 September 2026, before the prototype freeze, telemetry gained `obstacles`. Motion capture tracks O1 and O2 as rigid bodies, so the map shows a moved obstacle. `v` stays 1. The hardware team review also covers this field.
+
+On 7 October 2026, telemetry gained `hoops` in the same way, for hoops H1 to H3. `v` stays 1. A tablet that ignores `hoops` keeps working. The hardware team review also covers this field.
+
 ## Open items
 
 These decisions can change field values or rules. They do not need a new field.
 
 | Item | Effect on this format | Owner |
 |---|---|---|
-| Motion-capture origin and axes ([OPEN-08](../CONTEXT.md#unknowns-contradictions-and-open-decisions)) | Confirm that the host frame has `z` up and uses meters. Motion-capture software can stream a `y`-up frame. | Hardware team |
+| Motion-capture origin and axes ([DEC-13](../CONTEXT.md#accepted-decisions-made-after-the-proposal)) | Confirm that the host frame has `z` up and uses meters. Motive can stream a `y`-up frame. The bridge's `up_axis`, `rotation`, and `offset` settings map it to the course frame. Measure the rotation and offset in the lab. | Hardware team |
 | Multi-ranger, battery, and defensive-hover telemetry over the radio | Confirm the rate at which these values reach the host for three drones. | Hardware team |
 | Timeouts ([OPEN-06](../CONTEXT.md#unknowns-contradictions-and-open-decisions)) | Replace the placeholder values in `welcome.config`. | Both teams |
 | Altitude limits and rate constants ([OPEN-01, OPEN-02, OPEN-07](../CONTEXT.md#unknowns-contradictions-and-open-decisions)) | Replace `z_min`, `z_max`, and `rate_max`. | Software team |

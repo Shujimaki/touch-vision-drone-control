@@ -19,13 +19,27 @@ The interface responds to the operator, but only on screen. It is online at <htt
 
 ## What it does not do
 
-Nothing is simulated, and nothing is sent:
+Nothing is simulated:
 
 - no flight, altitude change, sensor readings, collisions, or defensive hover;
 - no gesture recognition, and no trials that start or end;
-- no messages, no connection to a host, and no use of the message format in [`protocol/`](../protocol/).
+- no connection to a host, unless the page address asks for [live positions](#live-positions).
 
 A dragged drone moves only on the map. Its sample sensor readings belong to its starting spot, so they clear once it moves.
+
+## Live positions
+
+With `?live` in the page address, the map shows the positions that the [command bridge](../bridge/README.md) measures with motion capture.
+The page sends `hello` and reads `welcome` and `telemetry` from [protocol version 1](../protocol/README.md). It sends no `input`, `event`, or `command` yet.
+
+- Drones move to their measured position, height, and heading. A drag sets only the target, so a drone moves on the map only when motion capture says it moved.
+- Obstacles move to their measured centre. Hoops move to their measured centre, height, and direction.
+- A drone, obstacle, or hoop without a fresh pose is drawn faded. A faded obstacle or hoop is drawn at its configured place.
+- The chip under the map shows the link: connecting, live, no data, or host lost. The page reconnects every 2 s.
+- Every other value stays sample data, including battery, link, Multi-ranger readings, the gesture, and the trial.
+
+For development, start the bridge with `uv run bridge --mock` in `bridge/`. Then run `npm run dev` here and open the page with `?live`. The dev server passes `/ws` to the bridge on port 8765.
+To connect straight to a bridge, give its address: `?live=ws://<bridge-ip>:8765/ws`. A page served over HTTPS, such as the GitHub Pages copy, needs a `wss://` address. Start the bridge with `--cert` and `--key` for that.
 
 ## Run it
 

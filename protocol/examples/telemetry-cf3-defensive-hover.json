@@ -32,5 +32,14 @@
             "defensive_hover": { "dir": "front", "range": 0.23 },
             "battery_v": 3.88
         }
+    ],
+    "obstacles": [
+        { "id": "O1", "x": 3.748, "y": 0.751, "z": 1.021, "yaw": 0.4, "pos_age_ms": 6.2 },
+        { "id": "O2", "x": 1.251, "y": 2.648, "z": 1.529, "yaw": -0.8, "pos_age_ms": 6.2 }
+    ],
+    "hoops": [
+        { "id": "H1", "x": 1.002, "y": 1.797, "z": 1.004, "yaw": 0.3, "pos_age_ms": 6.2 },
+        { "id": "H2", "x": 4.296, "y": 1.803, "z": 0.498, "yaw": 89.6, "pos_age_ms": 6.2 },
+        { "id": "H3", "x": null, "y": null, "z": null, "yaw": null, "pos_age_ms": null }
     ]
 }

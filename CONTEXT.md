@@ -234,7 +234,7 @@ Exact statistical tests, scoring variants, and missing-data rules remain unspeci
 
 The project supplied DEC-01 to DEC-08 on **17 September 2026**. It accepted REC-01 and added DEC-09 and DEC-10 on **23 September 2026**.
 The software team accepted DEC-11 on **27 September 2026**. Review by the hardware team is pending.
-The project added DEC-12 on **27 September 2026**.
+The project added DEC-12 on **27 September 2026**, and DEC-13 on **30 September 2026**.
 This register owns their status.
 These choices are separate from proposal claims. [README.md](README.md) describes their planned software implementation and dependency recommendations.
 
@@ -244,7 +244,7 @@ These choices are separate from proposal claims. [README.md](README.md) describe
 | DEC-02: Accepted project decision | Target Chrome for Android. Reported device specifications include Snapdragon 8 Gen 2, Android 16, and One UI 8.5. These reports are not device-test evidence. The exact Chrome version remains unrecorded. |
 | DEC-03: Accepted project decision | Portable software development can use macOS, Windows, or Linux. |
 | REC-01: Accepted project decision, 23 September 2026 | Use native Ubuntu 24.04, ROS 2 Jazzy, and Crazyswarm2 for the flight host. Crazyswarm2 replaces the proposal's original Crazyswarm recommendation. The label keeps its original number. The flight host computer and equipment compatibility remain unchecked (OPEN-08). |
-| DEC-04: Accepted project decision | Use laboratory motion capture. Its vendor, protocol, and software versions remain unknown. |
+| DEC-04: Accepted project decision | Use laboratory motion capture. DEC-13 identifies the vendor. The software versions remain unknown. |
 | DEC-05: Accepted project decision | Keep obstacle stopping onboard each drone. Retain stock PID and add the necessary firmware logic. |
 | DEC-06: Accepted project decision | Start with the built-in MediaPipe Gesture Recognizer. Change classification only in response to measured accuracy. |
 | DEC-07: Accepted project decision | Permit documented software replacements that preserve proposal control behavior, with reasons and compatibility checks. |
@@ -253,6 +253,7 @@ These choices are separate from proposal claims. [README.md](README.md) describe
 | DEC-10: Accepted project decision, 23 September 2026 | Build the tablet web app without a UI framework. Use browser APIs directly. |
 | DEC-11: Accepted project decision, 27 September 2026 (software team). Hardware team review pending. | Use version 1 of the [tablet and host messages](protocol/README.md). The tablet runs the altitude-channel state machine and sends the requested rate. The host owns the altitude targets, altitude limits, course mode, and trial clock. |
 | DEC-12: Accepted project decision, 27 September 2026 | Host the source repository publicly on GitHub under the account `Shujimaki`, and release it as open source. The account has no GitHub Pro. Without GitHub Pro, a personal account's private repositories have no protected branches, required reviewers, or code owners. [7][7] REQ-12 (SO6) also requires a public repository with the complete source code. SO6 names GitHub as an example host. [1][1], PDF pp. 22 and 25. The public repository supports REQ-12 but does not complete it. The project has not selected a license. |
+| DEC-13: Accepted project decision, 30 September 2026 | The laboratory motion capture is OptiTrack, with Motive streaming over NatNet. Motion capture tracks obstacles O1 and O2 as rigid bodies, in addition to the drones, so the live map shows their measured positions. On 7 October 2026, the project added hoops H1 to H3 as rigid bodies in the same way. The Motive version, the Motive computer, and the coordinate origin remain unrecorded. |
 
 ## Unknowns, contradictions, and open decisions
 
@@ -267,7 +268,7 @@ Each recommendation below needs a project decision or measurement before it chan
 | OPEN-05 | Five range directions do not provide complete obstacle coverage or downward sensing. Thin hoop frames and other drones need physical detection tests. [1][1], pp. 38, 58, and [3][3]. | Measure detection and stopping margins using the fully equipped drone. Do not use the advertised sensing range as proof of collision prevention. |
 | OPEN-06 | Hand loss is specified, but touch cancellation, browser suspension, host loss, stale motion capture, radio loss, and reconnection are not. [1][1], p. 42. | Define each failure separately. Use fresh activation after reconnection. Specify how position holding continues while tracking and control remain available. Check firmware timeout behavior for each failure. [4][4] |
 | OPEN-07 | Release/lock wording alternates between current position and last commanded position. Gesture confirmation time, dead zone, maximum rate, and pose-loss duration are absent. [1][1], pp. 29–30, 36–42. | Specify measured versus commanded hold targets for each event. Preserve the explicit last-commanded-altitude rule for hand loss. Cancel accumulated motion and require fresh activation after the final contact releases. |
-| OPEN-08 | The proposal names Crazyradio PA in prose and Crazyradio 2.0 in the budget. Lab tracking details and the flight host are unidentified. [1][1], pp. 38, 70–71. | Inventory the physical radio, tracking system, and host before selecting their integration software. OptiTrack appears in prior research, not as identification of this lab system. |
+| OPEN-08 | The proposal names Crazyradio PA in prose and Crazyradio 2.0 in the budget. The flight host is unidentified. DEC-13 identifies the tracking vendor as OptiTrack, but the Motive version and computer are unrecorded. [1][1], pp. 38, 70–71. | Inventory the physical radio, the host, and the Motive version and computer before selecting the flight integration software. |
 | OPEN-09 | Selectable onboard video is required, but the budget lists no cameras or receivers. [1][1], pp. 31–32, 70–73. | Identify equipment for every drone that must supply a selectable feed. Check payload, deck fit, power, transport, and combined tablet performance before fixing the video design. |
 | OPEN-10 | Figure 1 places both camera panels on the left and depicts takeoff/land/emergency controls. Prose specifies left hand-camera and right FPV panels. Multiple-held-drone altitude readouts are undefined. [1][1], pp. 34, 39–40. | Use prose for panel responsibilities. Show explicit drone labels for altitude and video. Define button behavior separately. Treat the mockup as an illustration. |
 | OPEN-11 | The baseline lacks a controller model, axis mapping, behavior for unselected drones, and shared safety and display rules. [1][1], pp. 33–34, 51–53. | Use the same course, trial records, and onboard stop for both interfaces. Document necessary control/display differences before expert pretests. These records identify differences that can affect the comparison. |
@@ -334,7 +335,7 @@ The glossary uses the proposal glossary, §§1.6–1.7.8, and the project decisi
    Local sources: [PDF export](<.local/references/[TOPIC PROPOSAL] Touch and Camera based drone flight system.pdf>) and [Markdown export](<.local/references/[TOPIC PROPOSAL] Touch and Camera based drone flight system.md>).
    These ignored exports are optional local references. The explanation above does not require access to them.
    PDF SHA-256: `ba884c2c4b4ca3aca1b24e05cfcea3e490f9957f2dcef04dc378cc9ec5ae06bf`.
-2. [Project decisions supplied on 17, 23, and 27 September 2026][2]. This local record preserves the supplied choices and their status separately from proposal claims.
+2. [Project decisions supplied on 17, 23, 27, and 30 September, and 7 October 2026][2]. This local record preserves the supplied choices and their status separately from proposal claims.
 3. [Bitcraze Multi-ranger deck datasheet, revision 1, 1 April 2020][3]. Official sensing specification, checked 17 September 2026 through Parallel Search.
 4. [Bitcraze commander framework, undated][4]. Official setpoint and timeout documentation, checked 17 September 2026.
 5. [MediaPipe Gesture Recognizer web guide, updated 17 August 2026][5]. Gesture labels and outputs checked on 17 September 2026 through Context7 and the official web guide.

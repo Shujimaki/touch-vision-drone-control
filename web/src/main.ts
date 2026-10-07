@@ -1,6 +1,7 @@
 // Mockup of the tablet interface. Components draw the fixed sample data into index.html, and the UI responds to the
 // operator: drag drones on the map, pick the video, switch tabs and theme, filter the log. This file keeps only what
-// the operator changes on screen. Nothing is simulated (no flight, sensors, gestures or trials) and no messages are sent.
+// the operator changes on screen. Nothing is simulated (no flight, sensors, gestures or trials). With ?live in the page
+// address, drones, obstacles and hoops take their measured positions from the command bridge (src/live.ts); nothing else is sent.
 import "./styles.css";
 import { COURSE, SAMPLE, sampleDrones, sampleLog, type TrialRecord } from "./sample";
 import { PAL, type Pal } from "./theme";
@@ -13,6 +14,7 @@ import { altitudeCard, dronesTable, healthTable, logView, trialCard } from "./co
 import { gestureStatus, heldAltitude } from "./components/panel";
 import { dragTarget } from "./zone";
 import { glideStep } from "./glide";
+import { applyTelemetry, connectLive, liveUrl, type LiveState } from "./live";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -178,7 +180,9 @@ mapSvg.addEventListener("pointermove", e => {
     log.push({ t: SAMPLE.now, text: `${U(d.id)} drag rejected: restricted zone`, k: "warn", ses: SAMPLE.trial.session, tr: SAMPLE.trial.id });
   }
   d.blockPt = to.blocked ? [fx, fy] : null;
-  d.tx = to.x; d.ty = to.y; d.gliding = true;
+  d.tx = to.x; d.ty = to.y;
+  if (live) { renderDrones(); return; }                      // live: the drone moves only when motion capture says so
+  d.gliding = true;
   d.ranges = {}; d.below = null;                              // the sample readings belong to the old spot
   startGlide();
 });
@@ -305,6 +309,36 @@ function toggleSettings(open?: boolean): void {
 byId("setBtn").addEventListener("click", () => toggleSettings());
 byId("setClose").addEventListener("click", () => toggleSettings(false));
 byId("fsBtn").addEventListener("click", () => { document.documentElement.requestFullscreen?.().catch(() => {}); });
+
+// ---------- live positions: ?live connects to the command bridge ----------
+const live = liveUrl(location.search, location);
+const HOME = { boxes: COURSE.boxes.map(b => ({ ...b })), hoops: COURSE.hoops.map(h => ({ ...h })) };
+const LIVE_TEXT: Record<LiveState, [string, string]> = {
+  connecting: ["MoCap: connecting", "tx2"], live: ["MoCap: live", "grn"], lost: ["MoCap: no data", "crit"], closed: ["MoCap: host lost", "crit"],
+};
+let staleMs = 250, lastLivePanels = 0;
+function liveState(s: LiveState): void {
+  const chip = byId("liveChip"), [text, k] = LIVE_TEXT[s];
+  chip.hidden = false; chip.textContent = text; chip.style.color = K[k as "tx2" | "grn" | "crit"];
+  if (s !== "live") for (const d of ui.drones) d.stale = true;
+  if (s !== "live") renderDrones();
+}
+if (live) connectLive(live, {
+  state: liveState,
+  welcome(w) {
+    staleMs = w.config.stale_position_ms;
+    const r = w.config.course.room, a = COURSE.arena;
+    if (r.x_min !== a.xMin || r.x_max !== a.xMax || r.y_min !== a.yMin || r.y_max !== a.yMax)
+      console.warn("live: the host room differs from the map room", r, a);
+    log.push({ t: SAMPLE.now, text: `Live positions: connected to ${live}`, k: "ok", ses: SAMPLE.trial.session, tr: "" });
+  },
+  telemetry(t) {
+    if (applyTelemetry(t, ui.drones, COURSE, HOME, staleMs)) renderCourse();
+    renderDrones();
+    const now = performance.now();
+    if (now - lastLivePanels > 100) { lastLivePanels = now; renderSoon(); }   // panels follow at about 10 per second
+  },
+});
 
 // ---------- start ----------
 byId("feeds").innerHTML = ui.drones.map(feedTile).join("");

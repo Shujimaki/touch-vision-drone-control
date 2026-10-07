@@ -1,0 +1,64 @@
+# Host configuration. The bridge sends every field above [mocap] to the tablet in welcome.config.
+# Field meanings and units: protocol/README.md. Values marked "placeholder" wait for the open items listed there.
+
+id = "course-draft-0.2"
+drones = ["cf1", "cf2", "cf3"]
+input_hz = 30
+telemetry_hz = 30
+input_timeout_ms = 300        # placeholder, OPEN-06
+telemetry_timeout_ms = 500    # placeholder, OPEN-06
+stale_position_ms = 250       # placeholder, OPEN-06
+rate_max = 0.2                # placeholder, OPEN-07
+zone_margin = 0.06            # placeholder
+z_min = 0.3                   # placeholder, OPEN-01
+z_max = 1.6                   # placeholder, OPEN-02
+
+# Course frame: origin at one room corner, x along the 5.31 m wall, y along the 3.55 m wall, z up.
+# The positions come from the proposal drawing (Figure 5), not from measurement. They match web/src/sample.ts.
+[course]
+room = { x_min = 0.0, x_max = 5.31, y_min = 0.0, y_max = 3.55 }
+capture_volume = { x_min = 0.25, x_max = 5.06, y_min = 0.25, y_max = 3.3 }
+restricted_zone = { x_min = 2.065, x_max = 3.245, y_min = 1.185, y_max = 2.365 }
+obstacles = [
+    { id = "O1", x_min = 1.045, x_max = 1.575, y_min = 1.305, y_max = 1.815, height = 1.02 },
+    { id = "O2", x_min = 2.335, x_max = 2.865, y_min = 2.455, y_max = 2.965, height = 1.53 },
+]
+hoops = [
+    { id = "H1", x = 1.31, y = 2.7, z = 1.0, diameter = 0.4, plane = "horizontal", yaw = 0.0 },
+    { id = "H2", x = 3.99, y = 2.7, z = 0.5, diameter = 0.4, plane = "vertical", yaw = 90.0 },
+    { id = "H3", x = 3.99, y = 1.49, z = 1.5, diameter = 0.4, plane = "vertical", yaw = 90.0 },
+]
+pads = [
+    { id = "cf1", x = 2.35, y = 0.45 },
+    { id = "cf2", x = 2.65, y = 0.45 },
+    { id = "cf3", x = 2.95, y = 0.45 },
+]
+
+[mocap]
+# "optitrack" reads Motive's NatNet stream. "mock" moves the drones in circles for work away from the lab.
+source = "optitrack"
+hostname = "127.0.0.1"        # IP address of the Motive computer. Replace it in the lab.
+# Motive's streaming "Up Axis". With "y", the bridge maps Motive (x, y, z) to course (x, -z, y).
+up_axis = "z"
+# Turn of Motive's floor axes, after the up-axis mapping: degrees counterclockwise from course +x (the 5.31 m wall)
+# to Motive +x, seen from above. Keep 0 when the calibration square's +x lies along the 5.31 m wall.
+rotation = 0.0
+# Added last: the course-frame position of Motive's origin. Measure it in the lab.
+offset = [0.0, 0.0, 0.0]
+
+# Project id = Motive rigid body name. Set each pivot at the body's footprint centre in Motive; for a hoop, at the
+# centre of the ring, with the rigid body's +x along the ring's horizontal diameter.
+# Each body needs three or more markers, preferably four, in an asymmetric pattern. Leave out a body that is not tracked.
+[mocap.bodies]
+cf1 = "cf1"
+cf2 = "cf2"
+cf3 = "cf3"
+O1 = "O1"
+O2 = "O2"
+H1 = "H1"
+H2 = "H2"
+H3 = "H3"
+
+[server]
+host = "0.0.0.0"
+port = 8765

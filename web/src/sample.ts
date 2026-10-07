@@ -5,8 +5,8 @@ export type Dir = "front" | "back" | "left" | "right" | "up";
 export type LogKind = "info" | "ok" | "warn" | "crit";
 export type Gesture = "idle" | "confirming" | "climb" | "descend" | "locked" | "lost" | "unrecognized";
 
-export interface Box { id: string; x: number; y: number; hx: number; hy: number; h: number }
-export interface Hoop { id: string; x: number; y: number; z: number; r: number; horizontal: boolean; ang: number }
+export interface Box { id: string; x: number; y: number; hx: number; hy: number; h: number; stale?: boolean }   // stale: live mode has no fresh pose
+export interface Hoop { id: string; x: number; y: number; z: number; r: number; horizontal: boolean; ang: number; stale?: boolean }
 export interface Course {
   arena: { xMin: number; xMax: number; yMin: number; yMax: number; margin: number };
   z: { min: number; max: number; displayMax: number };
@@ -27,6 +27,7 @@ export interface Drone {
   blockPt?: [number, number] | null;             // where the finger is while a drag is rejected at the restricted zone
   gliding?: boolean;                              // moving on screen toward a target the operator dragged to
   trail?: [number, number, number][];             // recent on-screen positions [x, y, ms], drawn as a fading trail
+  stale?: boolean;                                // live mode: no fresh motion-capture pose
 }
 export interface LogEntry { t: number; text: string; k: LogKind; ses: string; tr: string }
 export interface TrialRecord { id: string; session: string; t0: number; t1: number | null; outcome: string | null; dh: number; restrict: number }

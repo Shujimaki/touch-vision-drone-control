@@ -80,7 +80,7 @@
     <div class="mapbody" id="mapbody" role="tabpanel" aria-labelledby="tabMap">
       <button class="ticker" id="logToggle" aria-label="Latest event. Open the event log."><span class="dot" id="lastDot"></span><span class="ln" id="logLatest"></span></button>
       <div class="alertbar" id="alertBar" role="alert" hidden><span id="alertTxt"></span><button id="alertOk">Dismiss</button></div>
-      <div class="mapchip"><span class="scale"><i id="scaleBar"></i><span class="m">1 m</span></span><span class="m" id="cursor">--</span></div>
+      <div class="mapchip"><span class="scale"><i id="scaleBar"></i><span class="m">1 m</span></span><span class="m" id="cursor">--</span><span class="m" id="liveChip" hidden></span></div>
       <svg id="mapSvg" viewBox="0 0 600 600" preserveAspectRatio="none" role="application" aria-label="Tap a unit to select, hold and drag to set target"><g id="mapStatic"></g><g id="mapDyn"></g></svg>
     </div>
     <div class="telpane" id="telPane" role="tabpanel" aria-labelledby="tabTel" hidden>

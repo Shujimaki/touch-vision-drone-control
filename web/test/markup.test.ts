@@ -1,5 +1,6 @@
 // The mockup is one HTML page plus a UI script. These checks keep the two in step and keep the page a mockup:
-// every element the script uses exists, ids are unique, and nothing but the UI script runs.
+// every element the script uses exists, ids are unique, and nothing but the UI script runs. The only connection is the
+// optional live-position link in src/live.ts.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -21,8 +22,11 @@ describe("mockup page", () => {
   it("runs no script except the UI script", () => {
     expect([...html.matchAll(/<script\b[^>]*>/g)].map(m => m[0])).toEqual(['<script type="module" src="/src/main.ts">']);
   });
-  it("sends nothing and simulates nothing", () => {
+  it("simulates nothing and opens a connection only in src/live.ts", () => {
     const all = [script, ...["map", "altitude", "handCamera", "videoFeed", "telemetry", "panel"].map(f => readFileSync(join(web, "src", "components", f + ".ts"), "utf8"))].join("\n");
     for (const banned of ["WebSocket", "fetch(", "XMLHttpRequest", "serviceWorker", "setInterval"]) expect(all, banned).not.toContain(banned);
+  });
+  it("connects only when the page address asks for live positions", () => {
+    expect(script).toMatch(/if \(live\) connectLive\(/);
   });
 });
