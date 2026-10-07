@@ -8,6 +8,7 @@ import { dronesTable, logView, RANGE_COLS } from "../src/components/telemetry";
 import { gestureStatus, heldAltitude } from "../src/components/panel";
 import { flightState } from "../src/components/videoFeed";
 import { dragTarget } from "../src/zone";
+import { MAX_SPEED, glideStep } from "../src/glide";
 
 const K = PAL.dark, R = { trig: 0.15, show: 0.60 };
 const view = fitView(900, 800, COURSE.arena);
@@ -114,8 +115,50 @@ describe("restricted-zone drag check", () => {
   it("lets a drone that starts inside move out", () => {
     expect(dragTarget(z.x, z.y, z.x, 0.9, z).blocked).toBe(false);
   });
+  it("never lets a drone into the zone or its margin, over many drags in small steps and big jumps", () => {
+    const outer = z.h + z.margin, inMargin = (x: number, y: number) => Math.abs(x - z.x) < outer && Math.abs(y - z.y) < outer;
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (const steps of [1, 8]) {                    // 1: the finger jumps; 8: pointer events in small steps
+      for (let run = 0; run < 300; run++) {
+        let x = 0.4 + rnd() * 4.5, y = 0.4 + rnd() * 2.7;
+        if (inMargin(x, y)) continue;
+        for (let move = 0; move < 20; move++) {
+          const fx = 0.3 + rnd() * 4.7, fy = 0.3 + rnd() * 2.9;
+          for (let k = 1; k <= steps; k++) {
+            const r = dragTarget(x, y, x + (fx - x) * k / steps, y + (fy - y) * k / steps, z);
+            x = r.x; y = r.y;
+            expect(inMargin(x, y)).toBe(false);
+          }
+        }
+      }
+    }
+  });
   it("draws the rejection on the map while the finger is inside", () => {
     const [d1] = sampleDrones();
     expect(droneEntity({ ...d1!, blockPt: [z.x, z.y] }, COURSE, view, K, R)).toContain("DRAG REJECTED: restricted zone");
+  });
+});
+
+describe("drag glide (screen animation)", () => {
+  it("moves a dragged drone to its target at no more than 1 m/s, leaving a trail", () => {
+    const d = { ...sampleDrones()[1]!, tx: 4.0, ty: 0.5, gliding: true, trail: [] as [number, number, number][] };
+    let now = 0, frames = 0, prev = [d.x, d.y];
+    while (glideStep(d, 1 / 60, now += 1000 / 60) && frames < 1000) {
+      frames++;
+      expect(Math.hypot(d.x - prev[0]!, d.y - prev[1]!)).toBeLessThanOrEqual(MAX_SPEED / 60 + 1e-9);
+      prev = [d.x, d.y];
+    }
+    expect(d.x).toBeCloseTo(4.0, 3); expect(d.y).toBeCloseTo(0.5, 3); expect(d.gliding).toBe(false);
+    expect(d.trail.length).toBeGreaterThan(10);
+    expect(frames / 60).toBeLessThan(5);   // about 2.1 m, arriving within a few seconds
+  });
+  it("leaves a drone that was not dragged where it is", () => {
+    const d = sampleDrones()[1]!, x = d.x;
+    expect(glideStep(d, 1 / 60, 0)).toBe(false); expect(d.x).toBe(x);
+  });
+  it("ignores a negative first frame time", () => {
+    const d = { ...sampleDrones()[1]!, tx: 4.0, gliding: true }, x = d.x;
+    glideStep(d, -0.01, 0); expect(d.x).toBe(x);
   });
 });

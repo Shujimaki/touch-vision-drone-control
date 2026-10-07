@@ -135,5 +135,22 @@ export function droneEntity(d: Drone, c: Course, v: View, K: Pal, R: Readings): 
   return g;
 }
 
-export const droneLayer = (drones: Drone[], c: Course, v: View, K: Pal, R: Readings): string =>
-  drones.map(d => droneEntity(d, c, v, K, R)).join("");
+export const TRAIL_MS = 700;   // a trail point fades out over this long
+
+// Short fading trail behind a drone that is moving on screen.
+export function trailLayer(drones: Drone[], v: View, K: Pal, now: number): string {
+  let g = "";
+  for (const d of drones) {
+    const T = d.trail ?? [];
+    for (let i = 1; i < T.length; i++) {
+      const age = now - T[i]![2];
+      if (age > TRAIL_MS) continue;
+      const a = 1 - age / TRAIL_MS, [x0, y0] = T[i - 1]!, [x1, y1] = T[i]!;
+      g += `<line x1="${px(v, x0).toFixed(1)}" y1="${py(v, y0).toFixed(1)}" x2="${px(v, x1).toFixed(1)}" y2="${py(v, y1).toFixed(1)}" stroke="${K.grn}" stroke-width="${(0.8 + 2.6 * a).toFixed(2)}" stroke-opacity="${(0.75 * a * a).toFixed(3)}" stroke-linecap="round"/>`;
+    }
+  }
+  return g;
+}
+
+export const droneLayer = (drones: Drone[], c: Course, v: View, K: Pal, R: Readings, now = 0): string =>
+  trailLayer(drones, v, K, now) + drones.map(d => droneEntity(d, c, v, K, R)).join("");
