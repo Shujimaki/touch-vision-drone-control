@@ -14,7 +14,7 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Ron John B. Galvez',
-    maintainer_email='ron_galvez@dlsu.edu.ph',
+    maintainer_email='156326493+ronboopsh@users.noreply.github.com',
     description='ROS 2 multi-Crazyflie interface package bridging touch and MediaPipe inputs',
     license='Apache-2.0',
     entry_points={
