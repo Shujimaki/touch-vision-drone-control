@@ -56,6 +56,16 @@ def test_rotation_turns_the_floor_axes_and_the_yaw():
     assert (round(x, 6), round(y, 6), round(z, 6), round(yaw, 6)) == (0.5, 1.5, 0.4, -150.0)
 
 
+def test_numpy_input_gives_plain_floats():
+    # libmotioncapture returns numpy float32 values for VRPN; the telemetry must still be JSON.
+    import numpy as np
+    pos = np.array([1.0, 0.5, -2.0], dtype=np.float32)
+    quat = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    out = to_course(pos, quat, "y", [0.0, 0.0, 0.0])
+    assert all(type(v) is float for v in out)
+    json.dumps(out, allow_nan=False)
+
+
 def test_lab_config_reads_vrpn_with_y_up():
     # The lab's Motive 1.10 streams VRPN with height on Motive y (checked 14 October 2026).
     assert CFG.mocap.source == "vrpn" and CFG.mocap.up_axis == "y"

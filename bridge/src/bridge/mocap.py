@@ -47,8 +47,8 @@ def to_course(
     values = [*position, *wxyz]
     if len(values) != 7 or not all(math.isfinite(v) for v in values):
         return None
-    x, y, z = position
-    w, qx, qy, qz = wxyz
+    x, y, z = (float(v) for v in position)  # libmotioncapture may return numpy floats, which JSON cannot encode
+    w, qx, qy, qz = (float(v) for v in wxyz)
     if up_axis == "y":
         x, y, z = x, -z, y
         qx, qy, qz = qx, -qz, qy
