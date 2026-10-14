@@ -40,3 +40,12 @@ npm run dev
 ```
 
 Open the address that Vite prints. `npm run build` writes a static copy to `dist/`, and `npm test` checks the components and that the page and the script stay in step.
+
+## Online copy
+
+The mockup is published at <https://shujimaki.github.io/touch-vision-drone-control/> by the [Pages workflow](../.github/workflows/pages.yml).
+
+- **When it updates:** after every push to `main` that changes `web/` or the workflow. The workflow runs `npm ci`, `npm test` and `npm run build`, then publishes `dist/`. If a test fails, the site keeps the previous version.
+- **Republish by hand:** in GitHub, open Actions → Pages → Run workflow, on `main`. Or run `gh workflow run pages.yml -R Shujimaki/touch-vision-drone-control --ref main`.
+- **Repository setting:** Settings → Pages → Source must be **GitHub Actions**. With "Deploy from a branch", GitHub publishes the repository's root README instead of the mockup. After changing this setting, republish once.
+- **Publish the build, not the source:** the workflow uploads `web/dist`. This `index.html` loads TypeScript that only Vite can run, so publishing `web/` itself gives a blank page.
