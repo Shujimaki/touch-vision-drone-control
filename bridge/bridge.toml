@@ -35,11 +35,13 @@ pads = [
 ]
 
 [mocap]
-# "optitrack" reads Motive's NatNet stream. "mock" moves the drones in circles for work away from the lab.
-source = "optitrack"
+# "vrpn" reads Motive's VRPN stream, which works with Motive 1.x. "optitrack" reads NatNet, which needs Motive 2 or later
+# (see bridge/README.md). "mock" moves the drones in circles for work away from the lab.
+source = "vrpn"
 hostname = "127.0.0.1"        # IP address of the Motive computer. Replace it in the lab.
-# Motive's streaming "Up Axis". With "y", the bridge maps Motive (x, y, z) to course (x, -z, y).
-up_axis = "z"
+# Motive's up axis. The lab's Motive 1.10 VRPN stream is Y-up (checked 14 October 2026: height is Motive y).
+# With "y", the bridge maps Motive (x, y, z) to course (x, -z, y).
+up_axis = "y"
 # Turn of Motive's floor axes, after the up-axis mapping: degrees counterclockwise from course +x (the 5.31 m wall)
 # to Motive +x, seen from above. Keep 0 when the calibration square's +x lies along the 5.31 m wall.
 rotation = 0.0

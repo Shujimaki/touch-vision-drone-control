@@ -1,4 +1,4 @@
-"""Position sources: OptiTrack through libmotioncapture, and a mock for work away from the lab.
+"""Position sources: Motive through libmotioncapture (NatNet or VRPN), and a mock for work away from the lab.
 
 Each source keeps the latest pose of each tracked body, in the course frame, with the host time it arrived.
 """
@@ -60,10 +60,12 @@ def to_course(
     return x + offset[0], y + offset[1], z + offset[2], yaw
 
 
-class OptiTrackSource:
-    """Reads Motive's NatNet stream in a background thread. waitForNextFrame blocks, so it cannot run in asyncio."""
+class MotiveSource:
+    """Reads Motive in a background thread: NatNet ("optitrack") or VRPN ("vrpn").
+    waitForNextFrame blocks, so it cannot run in asyncio."""
 
-    def __init__(self, cfg: Config) -> None:
+    def __init__(self, cfg: Config, system: str) -> None:
+        self._system = system
         self._cfg = cfg.mocap
         self._ids = {body: pid for pid, body in cfg.mocap.bodies.items()}  # Motive name -> project id
         self._poses: dict[str, Pose] = {}
@@ -74,10 +76,10 @@ class OptiTrackSource:
     def start(self) -> None:
         import motioncapture  # imported here so the mock and the tests run without a Motive connection
 
-        log.info("connecting to Motive at %s", self._cfg.hostname)
-        mc = motioncapture.connect("optitrack", {"hostname": self._cfg.hostname})
+        log.info("connecting to Motive at %s over %s", self._cfg.hostname, self._system)
+        mc = motioncapture.connect(self._system, {"hostname": self._cfg.hostname})
         self._running = True
-        self._thread = threading.Thread(target=self._run, args=(mc,), name="optitrack", daemon=True)
+        self._thread = threading.Thread(target=self._run, args=(mc,), name=self._system, daemon=True)
         self._thread.start()
 
     def _run(self, mc) -> None:  # type: ignore[no-untyped-def]
@@ -141,4 +143,6 @@ class MockSource:
 
 
 def make_source(cfg: Config) -> PoseSource:
-    return OptiTrackSource(cfg) if cfg.mocap.source == "optitrack" else MockSource(cfg)
+    if cfg.mocap.source == "mock":
+        return MockSource(cfg)
+    return MotiveSource(cfg, cfg.mocap.source)  # "optitrack" or "vrpn"

@@ -6,7 +6,7 @@ import pytest
 
 from bridge import messages
 from bridge.config import load
-from bridge.mocap import MockSource, Pose, to_course
+from bridge.mocap import MockSource, MotiveSource, Pose, make_source, to_course
 from bridge.server import make_app
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -54,6 +54,19 @@ def test_rotation_turns_the_floor_axes_and_the_yaw():
     # Motive +x points along course +y (rotation 90): one metre along Motive x lands one metre along course y.
     x, y, z, yaw = to_course([1.0, 0.0, 0.4], yaw_quat(120, "z"), "z", [0.5, 0.5, 0.0], rotation=90)
     assert (round(x, 6), round(y, 6), round(z, 6), round(yaw, 6)) == (0.5, 1.5, 0.4, -150.0)
+
+
+def test_lab_config_reads_vrpn_with_y_up():
+    # The lab's Motive 1.10 streams VRPN with height on Motive y (checked 14 October 2026).
+    assert CFG.mocap.source == "vrpn" and CFG.mocap.up_axis == "y"
+
+
+def test_make_source_picks_the_motive_system():
+    assert isinstance(make_source(CFG), MotiveSource)
+    assert make_source(CFG)._system == "vrpn"
+    natnet = CFG.model_copy(update={"mocap": CFG.mocap.model_copy(update={"source": "optitrack"})})
+    assert make_source(natnet)._system == "optitrack"
+    assert isinstance(make_source(MOCK), MockSource)
 
 
 def test_lost_tracking_gives_no_pose():

@@ -54,7 +54,7 @@ class Course(Model):
 
 
 class Mocap(Model):
-    source: Literal["optitrack", "mock"]
+    source: Literal["optitrack", "vrpn", "mock"]
     hostname: str
     up_axis: Literal["y", "z"]
     offset: tuple[float, float, float]
