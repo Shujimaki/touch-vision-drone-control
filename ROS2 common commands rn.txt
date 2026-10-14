@@ -1,0 +1,26 @@
+//init
+cd ~/ros2_ws
+colcon build --symlink-install
+source /opt/ros/jazzy/setup.bash
+source ~/ros2_ws/install/setup.bash
+
+//run server
+ros2 launch crazyflie launch.py \
+  crazyflies_yaml_file:=$HOME/ros2_ws/src/touch-vision-drone-control/config/crazyflies.yaml \
+  teleop:=false \
+  gui:=false
+
+//nodes = active scripts
+//topic = communication bus for exchanging of data (prng router)
+ros2 node list
+ros2 topic list
+
+//check dongle
+lsusb | grep -i bitcraze
+
+//bring out handy gui to see code connections
+rqt_graph
+
+//dependencies
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install --packages-select touch_vision_drone_control
