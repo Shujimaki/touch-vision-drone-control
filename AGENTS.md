@@ -8,6 +8,7 @@ Read the document that owns the information needed for the task:
 |---|---|
 | Build, configure, run, or test the software | [README.md](README.md) owns the software overview, implementation plan, setup, usage, and testing guidance. |
 | Interpret or change thesis behavior, evaluation, or scope | [CONTEXT.md](CONTEXT.md) owns requirements, targets, accepted decisions, unresolved questions, glossary, and thesis sources. |
+| Record a build-time term or implementation decision | [docs/agents/domain.md](docs/agents/domain.md) owns how CONTEXT.md, GLOSSARY.md, and `docs/adr/` divide terms and decisions. |
 | Change the messages between the tablet and the host | [protocol/README.md](protocol/README.md) owns the message fields, units, limits, and examples. |
 | Commit, open a pull request, or merge | [.claude/skills/deliver-change/SKILL.md](.claude/skills/deliver-change/SKILL.md) owns the branch, check, commit, pull request, and merge procedure. |
 | Change agent procedures | This file owns shared project procedures, evidence rules, and delivery checks. |
@@ -26,7 +27,7 @@ Personal preferences supplement shared rules. Project requirements and higher-pr
 
 ## Documentation and evidence
 
-- Keep thesis requirements, decisions, and their sources in CONTEXT.md. Preserve its requirement, target, decision, and open-question labels.
+- Keep thesis requirements, thesis decisions, and their sources in CONTEXT.md. Preserve its requirement, target, decision, and open-question labels. Implementation decisions made during the build go in `docs/adr/`, as [docs/agents/domain.md](docs/agents/domain.md) describes.
 - Keep the source baseline, review date, source differences, and review limits with the review in CONTEXT.md.
 - Keep software architecture, dependencies, installation, usage, and testing guidance in README.md. Distinguish planned features from implemented and tested behavior.
 - Keep each requirement or decision in its owning document. Link to it instead of copying a second definition.
@@ -44,3 +45,17 @@ Personal preferences supplement shared rules. Project requirements and higher-pr
 Run checks appropriate to the change. Check every changed requirement, target, decision, and source link against its supporting material.
 Check that each changed section fits its document’s role and that cross-document links still resolve.
 Report the changes, check results, and any unavailable tools or incomplete checks.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on `Shujimaki/touch-vision-drone-control`, through the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context hybrid: CONTEXT.md for the thesis, plus GLOSSARY.md and `docs/adr/` for the build. See `docs/agents/domain.md`.
