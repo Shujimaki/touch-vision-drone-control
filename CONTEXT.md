@@ -235,6 +235,7 @@ Exact statistical tests, scoring variants, and missing-data rules remain unspeci
 The project supplied DEC-01 to DEC-08 on **17 September 2026**. It accepted REC-01 and added DEC-09 and DEC-10 on **23 September 2026**.
 The software team accepted DEC-11 on **27 September 2026**. Review by the hardware team is pending.
 The project added DEC-12 on **27 September 2026**.
+The project added DEC-13 on **20 October 2026**.
 This register owns their status.
 These choices are separate from proposal claims. [README.md](README.md) describes their planned software implementation and dependency recommendations.
 
@@ -253,6 +254,7 @@ These choices are separate from proposal claims. [README.md](README.md) describe
 | DEC-10: Accepted project decision, 23 September 2026 | Build the tablet web app without a UI framework. Use browser APIs directly. |
 | DEC-11: Accepted project decision, 27 September 2026 (software team). Hardware team review pending. | Use version 1 of the [tablet and host messages](protocol/README.md). The tablet runs the altitude-channel state machine and sends the requested rate. The host owns the altitude targets, altitude limits, course mode, and trial clock. |
 | DEC-12: Accepted project decision, 27 September 2026 | Host the source repository publicly on GitHub under the account `Shujimaki`, and release it as open source. The account has no GitHub Pro. Without GitHub Pro, a personal account's private repositories have no protected branches, required reviewers, or code owners. [7][7] REQ-12 (SO6) also requires a public repository with the complete source code. SO6 names GitHub as an example host. [1][1], PDF pp. 22 and 25. The public repository supports REQ-12 but does not complete it. The project has not selected a license. |
+| DEC-13: Accepted project decision, 20 October 2026 | Laboratory motion capture runs OptiTrack Motive on a separate motion capture machine. That machine streams measured drone positions to the flight host over a local network. The Motive version and its streaming settings remain unknown. DEC-13 partly settles OPEN-08. The user reported this on 20 October 2026. [2][2] |
 
 ## Unknowns, contradictions, and open decisions
 
@@ -267,7 +269,7 @@ Each recommendation below needs a project decision or measurement before it chan
 | OPEN-05 | Five range directions do not provide complete obstacle coverage or downward sensing. Thin hoop frames and other drones need physical detection tests. [1][1], pp. 38, 58, and [3][3]. | Measure detection and stopping margins using the fully equipped drone. Do not use the advertised sensing range as proof of collision prevention. |
 | OPEN-06 | Hand loss is specified, but touch cancellation, browser suspension, host loss, stale motion capture, radio loss, and reconnection are not. [1][1], p. 42. | Define each failure separately. Use fresh activation after reconnection. Specify how position holding continues while tracking and control remain available. Check firmware timeout behavior for each failure. [4][4] |
 | OPEN-07 | Release/lock wording alternates between current position and last commanded position. Gesture confirmation time, dead zone, maximum rate, and pose-loss duration are absent. [1][1], pp. 29–30, 36–42. | Specify measured versus commanded hold targets for each event. Preserve the explicit last-commanded-altitude rule for hand loss. Cancel accumulated motion and require fresh activation after the final contact releases. |
-| OPEN-08 | The proposal names Crazyradio PA in prose and Crazyradio 2.0 in the budget. Lab tracking details and the flight host are unidentified. [1][1], pp. 38, 70–71. | Inventory the physical radio, tracking system, and host before selecting their integration software. OptiTrack appears in prior research, not as identification of this lab system. |
+| OPEN-08 | The proposal names Crazyradio PA in prose and Crazyradio 2.0 in the budget. Lab tracking details and the flight host are unidentified. [1][1], pp. 38, 70–71. | Inventory the physical radio, tracking system, and host before selecting their integration software. DEC-13 identifies the tracking software as OptiTrack Motive. The radio model, the flight host, and the Motive version remain open. |
 | OPEN-09 | Selectable onboard video is required, but the budget lists no cameras or receivers. [1][1], pp. 31–32, 70–73. | Identify equipment for every drone that must supply a selectable feed. Check payload, deck fit, power, transport, and combined tablet performance before fixing the video design. |
 | OPEN-10 | Figure 1 places both camera panels on the left and depicts takeoff/land/emergency controls. Prose specifies left hand-camera and right FPV panels. Multiple-held-drone altitude readouts are undefined. [1][1], pp. 34, 39–40. | Use prose for panel responsibilities. Show explicit drone labels for altitude and video. Define button behavior separately. Treat the mockup as an illustration. |
 | OPEN-11 | The baseline lacks a controller model, axis mapping, behavior for unselected drones, and shared safety and display rules. [1][1], pp. 33–34, 51–53. | Use the same course, trial records, and onboard stop for both interfaces. Document necessary control/display differences before expert pretests. These records identify differences that can affect the comparison. |
@@ -289,6 +291,20 @@ PRO2 covers development and initial integration. PRO3 covers integration, experi
 The four Gantt charts use term weeks and exclude finals week 14. They do not establish current completion dates.
 The estimated out-of-pocket total is **₱4,205**, excluding borrowed equipment and personal units.
 A complete procurement budget still needs current prices and all required equipment. [1][1], §1.8, PDF pp. 63–73.
+
+## Thesis document format
+
+These rules come from the department's PRO2 course documents, not from the proposal. [8][8] [9][9]
+
+| Rule | Detail |
+|---|---|
+| PRO2 deadline | Submit the approved Chapters 1 to 5 by **3 December 2026** (Week 13). Include Appendix X proof of the Chapter 3 to 5 submissions and of a live prototype demonstration to the adviser. [8][8] |
+| Chapter structure | 1 Introduction, 2 Literature Review, 3 Theoretical Considerations, 4 Design Considerations, 5 Methodology, 6 Results and Discussion, 7 Conclusions, Recommendations and Future Directives. [9][9] |
+| Chapter 1 changes | Chapter 1 ends with 1.6 Conceptual Framework and 1.7 Thesis Structure. The proposal's design and evaluation sections (§§1.7–1.8, PDF pp. 33–73) move to Chapters 4 and 5. [9][9] |
+| Page format | Margins 2 in top, 1 in bottom, 1.6 in left and right. Headings in Arial Bold at 18, 16, and 14 pt. Body text in Times New Roman at 10 to 12 pt. [9][9] |
+| Change of objectives | PRO2 is the only term that allows a petition (Appendix F). The window runs from **12 to 26 November 2026** (Weeks 10–12). A change succeeds only if the team has built something. [8][8] |
+| Forum article | A PRO3 requirement: at least one IEEE double-column article of up to eight pages, in the thesis appendix. Appendix Q is its template. [8][8] [10][10] |
+| Exhibit and forum | PRO2 students attend the thesis exhibit and student forum on **25 November 2026** (Week 12). [8][8] |
 
 ## Shared glossary
 
@@ -316,7 +332,7 @@ A complete procurement budget still needs current prices and all required equipm
 | Setpoint | A setpoint is a target position, velocity, or other flight state supplied to the controller. It differs from measured position. |
 | PID controller | PID means proportional-integral-derivative control. The controller uses flight errors to stabilize the drone and follow targets. |
 | Firmware | Firmware is software that runs on drone or radio hardware. |
-| Ground station / flight host | The ground station, also called the flight host, connects browser input, drone commands, tracking, and trial records. |
+| Flight host | The flight host is the computer that runs the Python command bridge. The bridge connects browser input, drone commands, tracking, and trial records. The proposal calls this role the ground station. [GLOSSARY.md](GLOSSARY.md) defines the terms the build adds. |
 | CRTP / Crazyradio | CRTP is the Crazyflie communication protocol. Crazyradio is the USB radio used to communicate with drones. |
 | WebSocket | WebSocket provides a two-way message connection between the browser and host. |
 | FPV | FPV means first-person view from an onboard camera. |
@@ -340,6 +356,9 @@ The glossary uses the proposal glossary, §§1.6–1.7.8, and the project decisi
 5. [MediaPipe Gesture Recognizer web guide, updated 17 August 2026][5]. Gesture labels and outputs checked on 17 September 2026 through Context7 and the official web guide.
 6. [Bitcraze AI deck product documentation, undated][6]. The camera/Wi-Fi example was checked 17 September 2026 through Parallel Search. The project has not selected this component.
 7. [GitHub's plans, undated][7]. Official plan features for private repositories, checked 27 September 2026 through the GitHub Docs API.
+8. [DECEE thesis orientation, 1st term AY 2026–2027][8]. Department slide deck, 70 pages, read 20 October 2026. This ignored local file is optional.
+9. [Appendix I, Proposed Final Thesis Document Format][9]. Department chapter list and page format, 2 pages, read 20 October 2026. This ignored local file is optional.
+10. [Appendix Q, Full Paper Format][10]. Department IEEE article template for the DECEE Thesis Forum, 7 pages, read 20 October 2026. This ignored local file is optional.
 
 [1]: #references
 [2]: #accepted-decisions-made-after-the-proposal
@@ -348,3 +367,6 @@ The glossary uses the proposal glossary, §§1.6–1.7.8, and the project decisi
 [5]: https://developers.google.com/edge/mediapipe/solutions/vision/gesture_recognizer/web_js
 [6]: https://www.bitcraze.io/products/ai-deck
 [7]: https://docs.github.com/en/get-started/learning-about-github/githubs-plans
+[8]: <scratch/DECEE_Thesis_Orientation_1T_AY_2026-2027.pdf>
+[9]: <scratch/Appendix I-Proposed Final Thesis Document Format.docx.pdf>
+[10]: <scratch/Appendix Q- FullPaper Format.pdf>
