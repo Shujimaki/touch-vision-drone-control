@@ -1,0 +1,434 @@
+<!doctype html>
+<!-- PROTOTYPE for issue #22. Throwaway. Do not ship. The pure module in the first <script> is the part worth keeping. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drone connection prototype</title>
+<style>
+  :root { --bg:#fafaf9; --fg:#1c1917; --muted:#78716c; --line:#e7e5e4; --card:#fff; --accent:#2563eb; --accent-soft:#dbeafe; --bad:#b91c1c; --bad-soft:#fee2e2; --ok:#15803d; --changed:#fef9c3; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0c0a09; --fg:#f5f5f4; --muted:#a8a29e; --line:#292524; --card:#1c1917; --accent:#60a5fa; --accent-soft:#1e3a5f; --bad:#f87171; --bad-soft:#3f1d1d; --ok:#4ade80; --changed:#3f3a12; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, -apple-system, sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:24px; margin:0 0 4px; }
+  h2 { font-size:17px; margin:32px 0 10px; }
+  p { margin:6px 0; }
+  .muted { color:var(--muted); }
+  .badge { display:inline-block; font-size:12px; padding:1px 8px; border-radius:99px; background:var(--bad-soft); color:var(--bad); font-weight:600; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .scroll { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; }
+  td.changed { background:var(--changed); }
+  .state-pill { font-weight:600; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0; }
+  button { font:inherit; font-size:14px; padding:6px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.4; cursor:default; }
+  select, input { font:inherit; font-size:14px; padding:5px 8px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); }
+  input[type=number] { width:70px; }
+  .label { font-size:13px; color:var(--muted); min-width:120px; }
+  .log { font-family:ui-monospace, Menlo, monospace; font-size:13px; max-height:220px; overflow:auto; }
+  .log div { padding:2px 0; border-bottom:1px dashed var(--line); }
+  .log .rej { color:var(--bad); }
+  .log .acc { color:var(--ok); }
+  .tabs { display:flex; flex-wrap:wrap; gap:4px; border-bottom:1px solid var(--line); margin-bottom:12px; }
+  .tabs button { border:none; border-bottom:2px solid transparent; border-radius:0; background:none; padding:8px 10px; }
+  .tabs button.active { border-bottom-color:var(--accent); color:var(--accent); }
+  .steps { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  .steps button { text-align:left; }
+  .steps button.done { opacity:.5; text-decoration:line-through; }
+  .watch { background:var(--accent-soft); border-radius:8px; padding:8px 12px; margin-top:10px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:760px) { .grid2 { grid-template-columns:1fr; } }
+  ul { margin:6px 0; padding-left:20px; }
+</style>
+</head>
+<body>
+
+<!-- ===================== PURE MODULE (liftable) =====================
+     No DOM, no clock. Time comes in as `now` (seconds). Every function
+     returns a new state. This is the shape the Python mock drone connection
+     and its contract suite would copy.
+=================================================================== -->
+<script>
+const DroneConnection = (() => {
+  const SUB_STEP = 0.05; // s, integration step inside tick
+  const clone = (s) => JSON.parse(JSON.stringify(s));
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+
+  function createSwarm({ names, speedLimit = 0.5, takeoffHeight = 0.5, hoverThreshold = 0.3, now = 0 }) {
+    const drones = {};
+    names.forEach((name, i) => {
+      drones[name] = {
+        name,
+        state: 'grounded',          // grounded | taking_off | flying | landing | stopped
+        pos: { x: i * 1.0, y: 0, z: 0 },
+        target: null,               // last accepted position target
+        posMeasuredAt: now,         // measurement time of pos (from tracking)
+        radioMeasuredAt: now,       // measurement time of ranges, battery, defensive-hover flag
+        link: 'ok',
+        tracking: true,             // sim-only: is the motion capture machine seeing this drone
+        obstacle: null,             // sim-only: { dir, range } placed by the tester
+        battery_v: 4.15,
+        lastStep: { moved: 0, allowed: 0 },
+      };
+    });
+    return { now, speedLimit, takeoffHeight, hoverThreshold, stopLatched: false, drones };
+  }
+
+  function rangesOf(d) {
+    const r = { front: 4.0, back: 4.0, left: 4.0, right: 4.0, up: 4.0 };
+    if (d.obstacle) r[d.obstacle.dir] = d.obstacle.range;
+    return r;
+  }
+  // Body axes, assuming the drones never yaw: front +x, back -x, left +y, right -y, up +z.
+  const DIR = { front: [1, 0, 0], back: [-1, 0, 0], left: [0, 1, 0], right: [0, -1, 0], up: [0, 0, 1] };
+  // DECISION 2026-10-20: the drone follows the straight line to its latest target.
+  // During defensive hover it holds only while that line points toward the obstacle.
+  function pathBlocked(s, d) {
+    const h = defensiveHoverOf(s, d);
+    if (!h || !d.target) return false;
+    const v = DIR[h.dir];
+    const toward = (d.target.x - d.pos.x) * v[0] + (d.target.y - d.pos.y) * v[1] + (d.target.z - d.pos.z) * v[2];
+    return toward > 1e-9;
+  }
+  function defensiveHoverOf(s, d) {
+    if (d.state === 'grounded') return null;
+    const r = rangesOf(d);
+    for (const dir of Object.keys(r)) if (r[dir] < s.hoverThreshold) return { dir, range: r[dir] };
+    return null;
+  }
+
+  const ok = (note) => ({ ok: true, reason: null, note: note || null });
+  const no = (reason) => ({ ok: false, reason });
+
+  // ---- Commands the Python command bridge sends ----
+  function command(state, cmd, now) {
+    const s = tick(state, now);
+    const replies = {};
+    const each = (names, fn) => names.forEach((n) => { replies[n] = fn(s.drones[n]); });
+
+    switch (cmd.type) {
+      case 'set_target': each([cmd.drone], (d) => {
+        if (d.link !== 'ok') return no('link_lost');
+        if (d.state !== 'flying') return no('not_flying (' + d.state + ')');
+        d.target = { x: cmd.x, y: cmd.y, z: cmd.z };
+        return pathBlocked(s, d) ? ok('stored, but the line to it points at the obstacle, so the drone holds') : ok();
+      }); break;
+
+      case 'takeoff': each(cmd.drones, (d) => {
+        if (s.stopLatched) return no('stop_latched');
+        if (d.link !== 'ok') return no('link_lost');
+        if (d.state !== 'grounded') return no('not_grounded (' + d.state + ')');
+        d.state = 'taking_off';
+        d.target = { x: d.pos.x, y: d.pos.y, z: s.takeoffHeight };
+        return ok();
+      }); break;
+
+      case 'land': each(cmd.drones, (d) => {
+        if (d.link !== 'ok') return no('link_lost');
+        if (d.state === 'landing') return ok('already landing');
+        // DECISION 2026-10-20: land is the one way out of stop.
+        if (!['flying', 'taking_off', 'stopped'].includes(d.state)) return no('not_airborne (' + d.state + ')');
+        d.state = 'landing';
+        d.target = { x: d.pos.x, y: d.pos.y, z: 0 };
+        return ok();
+      }); break;
+
+      case 'stop': // global, payload {}
+        s.stopLatched = true;
+        Object.values(s.drones).forEach((d) => {
+          if (d.state !== 'grounded') { d.state = 'stopped'; d.target = { ...d.pos }; }
+          replies[d.name] = ok();
+        });
+        break;
+
+      case 'stop_reset': {
+        const airborne = Object.values(s.drones).filter((d) => d.state !== 'grounded').map((d) => d.name);
+        if (airborne.length) replies.swarm = no('not_all_grounded: ' + airborne.join(', '));
+        else { s.stopLatched = false; replies.swarm = ok(); }
+        break;
+      }
+      default: replies.swarm = no('unknown_command');
+    }
+    return { state: s, replies };
+  }
+
+  // ---- Things the world does (test controls, not part of the interface) ----
+  function worldEvent(state, ev, now) {
+    const s = tick(state, now);
+    const d = s.drones[ev.drone];
+    if (ev.type === 'link') { d.link = ev.value; if (d.link === 'ok') d.radioMeasuredAt = now; }
+    if (ev.type === 'tracking') { d.tracking = ev.value; if (d.tracking) d.posMeasuredAt = now; }
+    if (ev.type === 'obstacle') d.obstacle = ev.value;
+    return tick(s, now);
+  }
+
+  // ---- Advance time: the mock moves each drone toward its target ----
+  function tick(state, now) {
+    const s = clone(state);
+    const totalDt = Math.max(0, now - s.now);
+    Object.values(s.drones).forEach((d) => { d.lastStep = { moved: 0, allowed: s.speedLimit * totalDt }; });
+    let t = s.now;
+    while (t < now - 1e-9) {
+      const dt = Math.min(SUB_STEP, now - t);
+      t += dt;
+      Object.values(s.drones).forEach((d) => {
+        const airborne = d.state !== 'grounded';
+        // ASSUMPTION: with the link lost the drone gets no setpoints, so the mock holds it still.
+        // What the real firmware does then is a hardware-team open item.
+        const blocked = d.link !== 'ok' || d.state === 'stopped' || pathBlocked(s, d);
+        if (airborne && d.target && !blocked) {
+          const gap = dist(d.pos, d.target);
+          const step = Math.min(gap, s.speedLimit * dt);
+          if (gap > 1e-9) {
+            const k = step / gap;
+            d.pos.x += (d.target.x - d.pos.x) * k;
+            d.pos.y += (d.target.y - d.pos.y) * k;
+            d.pos.z += (d.target.z - d.pos.z) * k;
+            d.lastStep.moved += step;
+          }
+          if (dist(d.pos, d.target) < 1e-6) {
+            if (d.state === 'taking_off') d.state = 'flying';
+            if (d.state === 'landing') { d.state = 'grounded'; d.pos.z = 0; d.target = null; }
+          }
+        }
+        if (airborne) d.battery_v = Math.max(3.0, d.battery_v - 0.004 * dt);
+        if (d.tracking) d.posMeasuredAt = t;
+        if (d.link === 'ok') d.radioMeasuredAt = t;
+      });
+    }
+    s.now = now;
+    return s;
+  }
+
+  // ---- What the drone connection reports back to the bridge ----
+  function report(state) {
+    return Object.values(state.drones).map((d) => ({
+      drone: d.name,
+      state: d.state,
+      link: d.link,
+      position: { x: d.pos.x, y: d.pos.y, z: d.pos.z, measured_at: d.posMeasuredAt },
+      pos_age_ms: Math.round((state.now - d.posMeasuredAt) * 1000),
+      ranges: rangesOf(d),
+      battery_v: d.battery_v,
+      defensive_hover: defensiveHoverOf(state, d),
+      radio_age_ms: Math.round((state.now - d.radioMeasuredAt) * 1000),
+      target: d.target,
+      last_step: d.lastStep,
+    }));
+  }
+
+  // ---- Bridge side (not the drone connection) ----
+  // DECISION 2026-10-20: the bridge sends position targets only to drones that report flying.
+  // The drone connection still rejects stray targets as a guard.
+  function bridgeMaySendTarget(droneReport) {
+    return droneReport.state === 'flying' && droneReport.link === 'ok';
+  }
+
+  return { createSwarm, command, worldEvent, tick, report, bridgeMaySendTarget };
+})();
+</script>
+
+<main>
+  <h1>Drone connection prototype <span class="badge">PROTOTYPE, throwaway</span></h1>
+  <p class="muted">For issue #22. Opens by double-click, nothing to install.</p>
+  <div class="card" style="margin-top:12px">
+    <p><b>The question.</b> The Python command bridge talks to the swarm through a drone connection. The bridge sends position targets, takeoff, land, and stop. The drone connection reports, per drone, the flight state, link, position with its measurement time, ranges, battery voltage, and the defensive-hover flag. Before we write the Python interface and its contract suite, does this set of commands and reports hold up? Which commands should be legal in each flight state, and what should the drone connection report when the link or tracking drops?</p>
+    <p class="muted">The mock moves each drone straight toward its target at a placeholder speed limit of 0.5 m/s. Time only moves when you press an "advance time" button, so every run is repeatable. Flight states and field names follow <code>protocol/README.md</code>.</p>
+  </div>
+
+  <h2>Current state</h2>
+  <div class="card">
+    <div class="row"><span class="label">Clock</span><b id="clock"></b><span class="label" style="margin-left:24px">Stop latched</span><b id="latched"></b></div>
+    <div class="scroll"><table id="table"></table></div>
+    <p class="muted" style="font-size:13px">Yellow cells changed on the last action. "Moved / allowed" compares how far the drone moved in the last time step with speed limit × elapsed time. Moved must never be larger.</p>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <h2>Bridge commands</h2>
+      <div class="card">
+        <div class="row"><span class="label">Drone</span><select id="drone"></select></div>
+        <div class="row"><button data-cmd="takeoff">Take off</button><button data-cmd="land">Land</button></div>
+        <div class="row"><span class="label">Position target (m)</span>x <input id="tx" type="number" step="0.5" value="1">y <input id="ty" type="number" step="0.5" value="1">z <input id="tz" type="number" step="0.25" value="1"><button data-cmd="set_target">Send target</button></div>
+        <div class="row"><span class="label">Whole swarm</span><button data-cmd="stop">Stop</button><button data-cmd="stop_reset">Clear stop</button></div>
+      </div>
+    </div>
+    <div>
+      <h2>World and time</h2>
+      <div class="card">
+        <div class="row"><span class="label">Advance time</span><button data-time="0.1">+0.1 s</button><button data-time="1">+1 s</button><button data-time="5">+5 s</button></div>
+        <div class="row"><span class="label">Radio link</span><button data-world="link:lost">Lose link</button><button data-world="link:ok">Restore link</button></div>
+        <div class="row"><span class="label">Motion capture</span><button data-world="tracking:false">Lose tracking</button><button data-world="tracking:true">Restore tracking</button></div>
+        <div class="row"><span class="label">Obstacle</span><button data-world="obstacle:front">Wall 0.2 m in front</button><button data-world="obstacle:none">Clear obstacle</button></div>
+        <div class="row"><button id="reset">Reset everything</button></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>What the drone connection replied</h2>
+  <div class="card log" id="log"></div>
+
+  <h2>Guided walkthroughs</h2>
+  <div class="card">
+    <div class="tabs" id="tabs"></div>
+    <div id="scenario"></div>
+  </div>
+
+  <h2>Open items this prototype does not model</h2>
+  <div class="card">
+    <ul>
+      <li><b>Reconnect lockout (hardware team).</b> When an old radio connection stays half-open, can a new connection to the same drone get through, or is it locked out until the old one times out? The prototype treats "Restore link" as instant.</li>
+      <li><b>Bridge process stops (hardware team).</b> When the Python command bridge dies, setpoints stop. The Crazyflie firmware has its own setpoint timeout (CONTEXT.md, Bitcraze commander note), but what the drones do and how fast is not settled. The prototype has no way to stop the bridge.</li>
+      <li><b>Decided 2026-10-20.</b> The bridge sends targets only to flying drones. Land is allowed while stopped. During defensive hover the drone holds only while the straight line to its target points at the obstacle.</li>
+      <li><b>Decided 2026-10-20: two timestamps per drone report.</b> The drone connection stamps readings with the flight host clock. Position carries its own measurement time. Ranges, battery, and the defensive-hover flag share one radio measurement time. The hardware team confirms that these three arrive together.</li>
+    </ul>
+  </div>
+</main>
+
+<!-- ===================== PAGE SHELL (throwaway) ===================== -->
+<script>
+const NAMES = ['cf1', 'cf2', 'cf3'];
+let swarm, prev, log;
+
+function reset() {
+  swarm = DroneConnection.createSwarm({ names: NAMES, now: 0 });
+  prev = DroneConnection.report(swarm);
+  log = [];
+  render();
+}
+
+function addLog(what, replies) {
+  const parts = Object.entries(replies || {}).map(([who, r]) =>
+    `<span class="${r.ok ? 'acc' : 'rej'}">${who}: ${r.ok ? 'accepted' : 'rejected, ' + r.reason}${r.note ? ' (' + r.note + ')' : ''}</span>`);
+  log.unshift(`<div>t=${swarm.now.toFixed(1)} s · ${what}${parts.length ? ' → ' + parts.join(', ') : ''}</div>`);
+}
+
+function snapshot() { prev = DroneConnection.report(swarm); }
+
+function cmd(type, drone, extra) {
+  snapshot();
+  let c = { type };
+  if (type === 'takeoff' || type === 'land') c.drones = [drone];
+  if (type === 'set_target') {
+    c = { type, drone, ...extra };
+    const rep = DroneConnection.report(swarm).find((r) => r.drone === drone);
+    if (!DroneConnection.bridgeMaySendTarget(rep)) {
+      log.unshift(`<div>t=${swarm.now.toFixed(1)} s · Bridge holds back target for ${drone}: it is ${rep.state}, link ${rep.link}. Nothing sent.</div>`);
+      render();
+      return;
+    }
+  }
+  const r = DroneConnection.command(swarm, c, swarm.now);
+  swarm = r.state;
+  const label = { takeoff: 'Take off ' + drone, land: 'Land ' + drone, stop: 'Stop (all)', stop_reset: 'Clear stop',
+    set_target: `Target ${drone} → (${extra && extra.x}, ${extra && extra.y}, ${extra && extra.z})` }[type];
+  addLog(label, r.replies);
+  render();
+}
+
+function advance(dt) {
+  snapshot();
+  swarm = DroneConnection.tick(swarm, +(swarm.now + dt).toFixed(3));
+  addLog(`Advance ${dt} s`);
+  render();
+}
+
+function world(drone, kind, value) {
+  snapshot();
+  let v = value;
+  if (kind === 'tracking') v = value === 'true';
+  if (kind === 'obstacle') v = value === 'none' ? null : { dir: value, range: 0.2 };
+  swarm = DroneConnection.worldEvent(swarm, { type: kind, drone, value: v }, swarm.now);
+  const text = { 'link:lost': 'loses radio link', 'link:ok': 'gets radio link back', 'tracking:false': 'leaves motion capture view',
+    'tracking:true': 'is tracked again', 'obstacle:front': 'has a wall 0.2 m in front', 'obstacle:none': 'has no obstacle' }[kind + ':' + value];
+  addLog(`World: ${drone} ${text}`);
+  render();
+}
+
+const f = (n) => (n == null ? '–' : n.toFixed(2));
+const fp = (p) => (p ? `${f(p.x)}, ${f(p.y)}, ${f(p.z)}` : '–');
+
+function render() {
+  document.getElementById('clock').textContent = swarm.now.toFixed(1) + ' s';
+  document.getElementById('latched').textContent = swarm.stopLatched ? 'yes' : 'no';
+  const rows = DroneConnection.report(swarm);
+  const cols = [
+    ['Flight state', (r) => r.state],
+    ['Link', (r) => r.link],
+    ['Position x, y, z (m)', (r) => fp(r.position)],
+    ['Position measured at', (r) => r.position.measured_at.toFixed(2) + ' s'],
+    ['Position age', (r) => r.pos_age_ms + ' ms'],
+    ['Target', (r) => fp(r.target)],
+    ['Defensive hover', (r) => (r.defensive_hover ? `yes, ${r.defensive_hover.dir} ${f(r.defensive_hover.range)} m` : 'no')],
+    ['Ranges F/B/L/R/U (m)', (r) => ['front', 'back', 'left', 'right', 'up'].map((k) => r.ranges[k].toFixed(1)).join(' / ')],
+    ['Battery', (r) => r.battery_v.toFixed(3) + ' V'],
+    ['Radio age', (r) => r.radio_age_ms + ' ms'],
+    ['Moved / allowed (m)', (r) => `${f(r.last_step.moved)} / ${f(r.last_step.allowed)}${r.last_step.moved > r.last_step.allowed + 1e-9 ? ' OVER LIMIT' : ''}`],
+  ];
+  let html = '<tr><th></th>' + rows.map((r) => `<th>${r.drone}</th>`).join('') + '</tr>';
+  cols.forEach(([name, get]) => {
+    html += `<tr><th>${name}</th>` + rows.map((r, i) => {
+      const now = get(r), before = get(prev[i]);
+      const changed = now !== before && name !== 'Moved / allowed (m)';
+      return `<td class="${changed ? 'changed' : ''}${name === 'Flight state' ? ' state-pill' : ''}">${now}</td>`;
+    }).join('') + '</tr>';
+  });
+  document.getElementById('table').innerHTML = html;
+  document.getElementById('log').innerHTML = log.join('') || '<span class="muted">Nothing yet.</span>';
+}
+
+// Free-play wiring
+document.getElementById('drone').innerHTML = NAMES.map((n) => `<option>${n}</option>`).join('');
+const sel = () => document.getElementById('drone').value;
+document.querySelectorAll('[data-cmd]').forEach((b) => b.onclick = () => {
+  const t = b.dataset.cmd;
+  cmd(t, sel(), t === 'set_target' ? { x: +tx.value, y: +ty.value, z: +tz.value } : undefined);
+});
+document.querySelectorAll('[data-time]').forEach((b) => b.onclick = () => advance(+b.dataset.time));
+document.querySelectorAll('[data-world]').forEach((b) => b.onclick = () => { const [k, v] = b.dataset.world.split(':'); world(sel(), k, v); });
+document.getElementById('reset').onclick = reset;
+
+// Guided walkthroughs
+const T = (d, x, y, z) => ({ label: `Send target to ${d}: (${x}, ${y}, ${z})`, run: () => cmd('set_target', d, { x, y, z }) });
+const ADV = (s) => ({ label: `Advance time ${s} s`, run: () => advance(s) });
+const UP = (d) => ({ label: `Take off ${d}`, run: () => cmd('takeoff', d) });
+const DOWN = (d) => ({ label: `Land ${d}`, run: () => cmd('land', d) });
+
+const SCENARIOS = [
+  { name: 'Happy path', text: 'One drone takes off, flies to a target, and lands. Watch the flight state go grounded → taking off → flying → landing → grounded, and check that "moved" never beats "allowed".',
+    steps: [UP('cf1'), ADV(0.5), ADV(1), T('cf1', 1, 1, 1), ADV(1), ADV(5), DOWN('cf1'), ADV(5)] },
+  { name: 'Target too early', text: 'The bridge sends a target before the drone is flying. Decided: the bridge never sends it. The log shows the bridge holding the target back while grounded and while taking off, and sending it once the drone reports flying.',
+    steps: [T('cf2', 1, 1, 1), UP('cf2'), T('cf2', 1, 1, 1), ADV(1), ADV(1), T('cf2', 1, 1, 1), ADV(5)] },
+  { name: 'Land during takeoff', text: 'The operator changes their mind halfway up. Land is accepted while taking off and the drone turns around without ever reaching flying.',
+    steps: [UP('cf1'), ADV(0.5), DOWN('cf1'), ADV(1), ADV(1)] },
+  { name: 'Stop mid-flight', text: 'Two drones fly, then the swarm is stopped. Both hold in the air and ignore targets. Decided: land is still allowed, so each stopped drone can come straight down. Clearing the stop works once every drone is grounded.',
+    steps: [UP('cf1'), UP('cf2'), ADV(2), T('cf1', 2, 2, 1), ADV(1), { label: 'Stop the swarm', run: () => cmd('stop') }, ADV(1), T('cf1', 0, 0, 1), { label: 'Clear stop (too early)', run: () => cmd('stop_reset') }, DOWN('cf1'), DOWN('cf2'), ADV(5), { label: 'Clear stop', run: () => cmd('stop_reset') }, UP('cf3')] },
+  { name: 'Defensive hover', text: 'A wall appears 0.2 m in front of cf2 (below the 0.3 m placeholder threshold). Decided: the drone always follows the straight line to the latest target. It holds while that line points at the wall, and moves again as soon as a new target pulls it away from the wall, even before the wall clears.',
+    steps: [UP('cf2'), ADV(2), T('cf2', 3, 0, 0.5), ADV(1), { label: 'Wall appears in front of cf2', run: () => world('cf2', 'obstacle', 'front') }, ADV(1), T('cf2', 3, 0, 1), ADV(1), { label: 'Finger moves behind the drone', run: () => cmd('set_target', 'cf2', { x: 0, y: 1, z: 0.5 }) }, ADV(1), { label: 'Finger moves past the wall again', run: () => cmd('set_target', 'cf2', { x: 3, y: 1, z: 0.5 }) }, ADV(1), { label: 'Wall clears', run: () => world('cf2', 'obstacle', 'none') }, ADV(5)] },
+  { name: 'Link or tracking lost', text: 'First cf3 loses its radio link: radio age grows, commands are rejected, and the mock holds it still (real behavior is a hardware open item). Then it leaves motion capture view: "measured at" freezes and position age grows. This is why every position needs a timestamp.',
+    steps: [UP('cf3'), ADV(2), T('cf3', 3, 1, 1), ADV(1), { label: 'cf3 loses radio link', run: () => world('cf3', 'link', 'lost') }, ADV(1), T('cf3', 0, 0, 1), { label: 'cf3 gets link back', run: () => world('cf3', 'link', 'ok') }, { label: 'cf3 leaves motion capture view', run: () => world('cf3', 'tracking', 'false') }, ADV(1), ADV(1), { label: 'cf3 tracked again', run: () => world('cf3', 'tracking', 'true') }] },
+];
+
+let active = 0, stepIdx = 0;
+function renderTabs() {
+  document.getElementById('tabs').innerHTML = SCENARIOS.map((s, i) => `<button class="${i === active ? 'active' : ''}" data-tab="${i}">${s.name}</button>`).join('');
+  document.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => startScenario(+b.dataset.tab));
+  const s = SCENARIOS[active];
+  document.getElementById('scenario').innerHTML = `<p>${s.text}</p><p class="muted" style="font-size:13px">Picking this tab reset the swarm. Press the steps in order.</p><div class="steps">` +
+    s.steps.map((st, i) => `<button data-step="${i}" class="${i < stepIdx ? 'done' : i === stepIdx ? 'primary' : ''}" ${i !== stepIdx ? 'disabled' : ''}>${i + 1}. ${st.label}</button>`).join('') +
+    `</div>${stepIdx >= s.steps.length ? '<div class="watch">Done. Look at the replies log and the table above.</div>' : ''}`;
+  document.querySelectorAll('[data-step]').forEach((b) => b.onclick = () => { s.steps[+b.dataset.step].run(); stepIdx++; renderTabs(); });
+}
+function startScenario(i) { active = i; stepIdx = 0; reset(); renderTabs(); }
+
+reset();
+renderTabs();
+</script>
+</body>
+</html>
