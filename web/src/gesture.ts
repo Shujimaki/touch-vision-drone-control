@@ -2,7 +2,7 @@
 // --> where to find runtime and trained model, and config; returns a recognizer
 
 import {
-  FilesetResolver, //locates runtime files 
+  FilesetResolver, //locates runtime files
   GestureRecognizer //class for creating gesture recognizer object
 } from "@mediapipe/tasks-vision";
 
@@ -23,14 +23,14 @@ export async function createGestureRecognizer(): Promise<GestureRecognizer> {
   });
 }
 
-// for processing camera frame; returns gesture name and height of wrist 
+// for processing camera frame; returns gesture name and height of wrist
 export function readGestureFrame(
   recognizer: GestureRecognizer, // recognizer object
   frame: ImageBitmap, // one camera frame that can be transferred to a worker
   timestampMs: number // timestamp in milliseconds
 ) {
     // process specific frame at that timestamp
-    const result = recognizer.recognizeForVideo(frame, timestampMs); 
+    const result = recognizer.recognizeForVideo(frame, timestampMs);
 
     const hand = result.landmarks[0]; // only 1 hand to detect
     const gesture = result.gestures[0]?.[0]; // get 1st item of from list of gesture results for that hand , if none ? undefined
