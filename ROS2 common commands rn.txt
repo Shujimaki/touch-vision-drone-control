@@ -10,6 +10,12 @@ ros2 launch crazyflie launch.py \
   teleop:=false \
   gui:=false
 
+//after running server u can run test flights, change the height(in meters) if ever
+//takeoff
+ros2 service call /cf1/takeoff crazyflie_interfaces/srv/Takeoff "{height: 0.6, duration: {sec: 2}}"
+//land
+ros2 service call /cf1/land crazyflie_interfaces/srv/Land "{height: 0.0, duration: {sec: 2}}"
+
 //nodes = active scripts
 //topic = communication bus for exchanging of data (prng router)
 ros2 node list
