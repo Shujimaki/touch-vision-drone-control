@@ -7,7 +7,9 @@ export type GestureFrameResult = ReturnType<typeof readGestureFrame>;
 
 // messages from the page to the worker; either initialization or frame-processing
 export type GestureWorkerRequest =
-  | { type: "init" }
+  | { type: "init" 
+      assetBaseUrl: string; // url of web app's public/mediapipe folder
+  }   
   | {
       type: "frame"; // identifies this as a frame to be processed
       frame: ImageBitmap; // holds camera snapshot
