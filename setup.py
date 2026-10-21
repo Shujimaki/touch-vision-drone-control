@@ -20,7 +20,7 @@ setup(
     entry_points={
         'console_scripts': [
             'check_repo = scripts.check:main',
-            'backend_server = scripts.backend_server:main',
+            'backend_server = touch_vision_drone_control.backend_server:main',
         ],
     },
 )
