@@ -44,3 +44,6 @@ test-results/
 .DS_Store
 Thumbs.db
 .gstack/
+
+# Downloaded MediaPipe runtime and model files
+/web/public/mediapipe/
