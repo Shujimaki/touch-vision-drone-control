@@ -26,11 +26,11 @@ export async function createGestureRecognizer(): Promise<GestureRecognizer> {
 // for processing camera frame; returns gesture name and height of wrist 
 export function readGestureFrame(
   recognizer: GestureRecognizer, // recognizer object
-  video: HTMLVideoElement, // video element
+  frame: ImageBitmap, // one camera frame that can be transferred to a worker
   timestampMs: number // timestamp in milliseconds
 ) {
     // process specific frame at that timestamp
-    const result = recognizer.recognizeForVideo(video, timestampMs); 
+    const result = recognizer.recognizeForVideo(frame, timestampMs); 
 
     const hand = result.landmarks[0]; // only 1 hand to detect
     const gesture = result.gestures[0]?.[0]; // get 1st item of from list of gesture results for that hand , if none ? undefined
@@ -39,7 +39,7 @@ export function readGestureFrame(
       handDetected: hand !== undefined, // if hand was detected
       label: gesture?.categoryName ?? null, // name of gesture
       score: gesture?.score?? null, // model's confidence score of gesture
-      wristY: hand?.[0].y ?? null // get first landmark of hand (wrist) and its y coordinate, if no hand detected ? null
+      wristY: hand?.[0]?.y ?? null // get first landmark of hand (wrist) and its y coordinate, if no hand detected ? null
     };
 }
 
@@ -51,3 +51,5 @@ export function readGestureFrame(
  * Landmark index reference:
  * https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/python/solutions/hands.py#L45-L66
  */
+
+
