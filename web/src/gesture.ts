@@ -6,17 +6,21 @@ import {
   GestureRecognizer //class for creating gesture recognizer object
 } from "@mediapipe/tasks-vision";
 
-export async function createGestureRecognizer(): Promise<GestureRecognizer> {
-  const base = import.meta.env.BASE_URL; // app base path
+export async function createGestureRecognizer(
+  assetBaseUrl: string
+): Promise<GestureRecognizer> {
+  const runtimeUrl = new URL("wasm", assetBaseUrl).href; //address of supporting files
+  const modelUrl = new URL( //address of trained model
+    "gesture_recognizer.task",
+    assetBaseUrl // use the public/mediapipe folder of the web app
+  ).href;
 
-  const vision = await FilesetResolver.forVisionTasks(
-    `${base}mediapipe/wasm` // locate runtime files
-  );
+  const vision = await FilesetResolver.forVisionTasks(runtimeUrl);
 
   // create recognizer, use model from mediapipe/gesture_recognizer.task
   return GestureRecognizer.createFromOptions(vision, {
     baseOptions: {
-      modelAssetPath: `${base}mediapipe/gesture_recognizer.task`
+      modelAssetPath: modelUrl
     },
     runningMode: "VIDEO", // successive frames
     numHands: 1 // max number of hands to detect in each frame
