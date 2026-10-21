@@ -5,9 +5,9 @@ import type { readGestureFrame } from "./gesture";
 // data returned by our frame-reading function
 export type GestureFrameResult = ReturnType<typeof readGestureFrame>;
 
-// messages from the page to the worker
+// messages from the page to the worker; either initialization or frame-processing
 export type GestureWorkerRequest =
-  | { type: "init" } // initialization message
+  | { type: "init" }
   | {
       type: "frame"; // identifies this as a frame to be processed
       frame: ImageBitmap; // holds camera snapshot
