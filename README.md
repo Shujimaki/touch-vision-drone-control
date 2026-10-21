@@ -161,11 +161,19 @@ Identify the equipment in each calibration record. Setup commands will follow ap
 
 ## Testing
 
-No application tests exist yet. The implementation needs three levels of checks:
+Only the drone connection has tests so far (see below). The implementation needs three levels of checks:
 
 - Use the mock connection to check command fields, limits, input state, and trial records against the [control requirements](CONTEXT.md#required-interactions-and-control-behavior).
 - Use the physical tablet to check camera access, three touch contacts, gestures, and video together.
 - Use equipped drones and motion capture to measure flight stability, stopping distance, radio behavior, and physical response latency.
+
+The Python command bridge has its first tests in `test/`. They need no ROS 2 install. From the repository root, run:
+
+```bash
+uv run --no-project --python 3.12 --with pytest pytest
+```
+
+`test/test_drone_connection_contract.py` is the contract suite for drone connections. It runs against the mock drone connection now. The hardware team adds a harness for the Crazyswarm2 drone connection to its `HARNESSES` list, and the same tests then run against the real swarm.
 
 The [evaluation plan](CONTEXT.md#evaluation-method-and-numerical-targets) defines the study procedure, numerical targets, and scoring rules.
 Record commands, equipment, dependency versions, results, and limitations for each test run.
