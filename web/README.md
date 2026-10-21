@@ -35,11 +35,24 @@ Node.js 24 or later. From this folder:
 npm ci
 ```
 
+Prepare the MediaPipe runtime files and gesture model:
+
+```bash
+node scripts/setup-mediapipe.mjs
+```
+
+The first run needs internet access to download the model. The script checks
+its size and SHA-256 against the values recorded in the root README.
+Later runs reuse the verified model. Generated files stay in
+`public/mediapipe/` and are excluded from Git.
+
 ```bash
 npm run dev
 ```
 
 Open the address that Vite prints. `npm run build` writes a static copy to `dist/`, and `npm test` checks the components and that the page and the script stay in step.
+
+
 
 ## Online copy
 
