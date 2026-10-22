@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --locked --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
 """Run the automatic repository checks before a commit or a pull request.
 
 AGENTS.md "Before delivery" owns the check rules. This script runs the checks
@@ -13,7 +17,7 @@ the change first. It prints one line for each check:
 The exit status is 1 if any check fails. Otherwise it is 0. With --strict, an
 INCOMPLETE check also gives exit status 1.
 
-Usage: python3 scripts/check.py [--base REF] [--strict]
+Usage: uv run --locked --script scripts/check.py [--base REF] [--strict]
 """
 
 from __future__ import annotations
