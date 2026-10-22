@@ -2,7 +2,9 @@ import math
 
 import pytest
 
-from protocol_examples import example_text
+from protocol_examples import example, example_text
+
+from touch_vision_drone_control.host_config import PLACEHOLDER_CONFIG
 
 from touch_vision_drone_control.messages import TABLET_MESSAGE, Reply, Welcome, encode
 
@@ -34,3 +36,7 @@ def test_encoding_refuses_nan_and_infinity(value: float) -> None:
 def test_a_reply_has_a_code_exactly_when_it_rejects(ok: bool, code: str | None) -> None:
     with pytest.raises(ValueError):
         Reply(seq=1, host_ms=0.0, ref=None, ok=ok, code=code, detail=None)
+
+
+def test_the_placeholder_config_matches_the_welcome_example() -> None:
+    assert PLACEHOLDER_CONFIG.model_dump(mode="json") == example("welcome")["config"]

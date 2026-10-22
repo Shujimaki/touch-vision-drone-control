@@ -24,6 +24,8 @@ from touch_vision_drone_control.messages import (
 
 _log = logging.getLogger(__name__)
 
+_INPUT_REPLY_INTERVAL_S = 1.0
+
 
 class _OperatorSlot:
     def __init__(self) -> None:
@@ -82,7 +84,7 @@ async def _handle_socket(request: web.Request) -> web.WebSocketResponse:
             if msg.type is WSMsgType.TEXT:
                 await connection.receive(msg.data)
             elif msg.type is WSMsgType.BINARY:
-                await connection.reject(None, "invalid", "messages must be text frames")
+                await connection.receive_binary()
             else:
                 _log.warning("closing a socket after %s: %s", msg.type.name, ws.exception())
                 break
@@ -99,6 +101,7 @@ class _Connection:
         self._role: Role | None = None
         self._last_seq: int | None = None
         self._last_input_t_ms: float | None = None
+        self._last_input_reply_s: dict[ReplyCode, float] = {}
 
     async def receive(self, text: str) -> None:
         raw = _json_object(text)
@@ -115,29 +118,35 @@ class _Connection:
         try:
             message = TABLET_MESSAGE.validate_python(raw)
         except ValidationError as error:
-            await self._reject_or_close(ref, _first_error(error))
+            await self._reject_or_close(ref, _first_error(error), input_stream=raw.get("type") == "input")
             return
         if self._last_seq is not None and message.seq <= self._last_seq:
-            await self.reject(ref, "invalid", f"seq {message.seq} does not follow {self._last_seq}")
+            detail = f"seq {message.seq} does not follow {self._last_seq}"
+            await self._reject(ref, "invalid", detail, input_stream=isinstance(message, Input))
             return
         if self._last_seq is not None and message.seq > self._last_seq + 1:
             _log.info("seq gap: %d messages missing before seq %d", message.seq - self._last_seq - 1, message.seq)
         self._last_seq = message.seq
         await self._handle(message, message.seq)
 
+    async def receive_binary(self) -> None:
+        await self._reject_or_close(None, "messages must be text frames")
+
     async def _handle(self, message: Hello | Input | Event | Command, ref: int) -> None:
         match message:
             case Hello() if self._role is not None:
-                await self.reject(ref, "invalid", "hello was already received")
+                await self._reject(ref, "invalid", "hello was already received")
             case Hello():
                 await self._welcome(message, ref)
             case Command():
-                await self.reject(ref, "not_allowed", f"{message.name} is not supported yet")
+                await self._reject(ref, "not_allowed", f"{message.name} is not supported yet")
             case Input() | Event() if not self._app[OPERATOR].held_by(self):
-                await self.reject(ref, "not_allowed", f"only the operator sends {message.type}")
+                detail = f"only the operator sends {message.type}"
+                await self._reject(ref, "not_allowed", detail, input_stream=isinstance(message, Input))
             case Input():
                 if self._last_input_t_ms is not None and message.t_ms < self._last_input_t_ms:
-                    await self.reject(ref, "invalid", "input t_ms is earlier than the previous input")
+                    detail = "input t_ms is earlier than the previous input"
+                    await self._reject(ref, "invalid", detail, input_stream=True)
                 else:
                     self._last_input_t_ms = message.t_ms
             case Event():
@@ -160,20 +169,31 @@ class _Connection:
             )
         )
 
-    async def reject(self, ref: int | None, code: ReplyCode, detail: str) -> None:
+    async def _reject(self, ref: int | None, code: ReplyCode, detail: str, input_stream: bool = False) -> None:
+        if input_stream and not self._input_reply_due(code):
+            return
         await self._send(
             Reply(seq=self._next_seq(), host_ms=self._host_ms(), ref=ref, ok=False, code=code, detail=detail)
         )
 
     async def _close(self, ref: int | None, code: ReplyCode, detail: str) -> None:
-        await self.reject(ref, code, detail)
+        await self._reject(ref, code, detail)
         await self._ws.close()
 
-    async def _reject_or_close(self, ref: int | None, detail: str) -> None:
+    async def _reject_or_close(self, ref: int | None, detail: str, input_stream: bool = False) -> None:
         if self._role is None:
             await self._close(ref, "invalid", detail)
         else:
-            await self.reject(ref, "invalid", detail)
+            await self._reject(ref, "invalid", detail, input_stream)
+
+    def _input_reply_due(self, code: ReplyCode) -> bool:
+        """The protocol allows one reply each second for each error code on the input stream."""
+        now = self._app[CLOCK]()
+        last = self._last_input_reply_s.get(code)
+        if last is not None and now - last < _INPUT_REPLY_INTERVAL_S:
+            return False
+        self._last_input_reply_s[code] = now
+        return True
 
     async def _send(self, message: Welcome | Reply) -> None:
         await self._ws.send_str(encode(message))

@@ -12,9 +12,22 @@ TEST_CONFIG = PLACEHOLDER_CONFIG.model_copy(update={"id": "test-config", "input_
 INPUT = example("input-three-drones-climbing")
 
 
+class FakeClock:
+    def __init__(self) -> None:
+        self.s = 1.23456
+
+    def __call__(self) -> float:
+        return self.s
+
+
 @pytest.fixture
-async def connect(aiohttp_client):
-    client = await aiohttp_client(create_app(TEST_CONFIG, session="s-test", clock=lambda: 1.23456))
+def clock() -> FakeClock:
+    return FakeClock()
+
+
+@pytest.fixture
+async def connect(aiohttp_client, clock):
+    client = await aiohttp_client(create_app(TEST_CONFIG, session="s-test", clock=clock))
 
     async def open_socket():
         return await client.ws_connect("/ws", timeout=ClientWSTimeout(ws_receive=2))
@@ -33,9 +46,9 @@ async def assert_closed(ws) -> None:
 
 
 async def assert_still_open(ws, seq: int) -> None:
-    await ws.send_json(INPUT | {"seq": seq, "extra": 1})
+    await ws.send_json(example("hello", seq=seq))
     reply = await ws.receive_json()
-    assert (reply["ref"], reply["code"]) == (seq, "invalid")
+    assert (reply["ref"], reply["code"], reply["detail"]) == (seq, "invalid", "hello was already received")
 
 
 async def test_hello_gets_a_welcome_with_the_bridge_configuration(connect) -> None:
@@ -169,6 +182,16 @@ async def test_a_binary_frame_gets_invalid_and_the_connection_stays_open(connect
     await assert_still_open(ws, 2)
 
 
+async def test_a_binary_first_frame_gets_invalid_and_closes(connect) -> None:
+    ws = await connect()
+
+    await ws.send_bytes(json.dumps(example("hello")).encode())
+    reply = await ws.receive_json()
+
+    assert (reply["ref"], reply["code"]) == (None, "invalid")
+    await assert_closed(ws)
+
+
 @pytest.mark.parametrize("seq", [1, 5])
 async def test_a_message_whose_seq_does_not_increase_gets_invalid(connect, seq) -> None:
     ws = await connect()
@@ -243,3 +266,19 @@ async def test_commands_are_not_supported_yet(connect) -> None:
     reply = await ws.receive_json()
 
     assert (reply["ref"], reply["code"]) == (2, "not_allowed")
+
+
+async def test_input_replies_are_limited_to_one_each_second_for_each_code(connect, clock) -> None:
+    ws = await connect()
+    await say_hello(ws)
+    await ws.send_json(INPUT | {"seq": 2})
+
+    for seq in (3, 4):
+        await ws.send_json(INPUT | {"seq": seq, "t_ms": INPUT["t_ms"] - 1})
+    await ws.send_json(INPUT | {"seq": 5, "extra": 1})
+    assert (await ws.receive_json())["ref"] == 3
+    await assert_still_open(ws, 6)
+
+    clock.s += 1.0
+    await ws.send_json(INPUT | {"seq": 7, "t_ms": INPUT["t_ms"] - 1})
+    assert (await ws.receive_json())["ref"] == 7
