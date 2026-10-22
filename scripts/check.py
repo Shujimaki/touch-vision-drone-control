@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --locked --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
 """Run the automatic repository checks before a commit or a pull request.
 
 AGENTS.md "Before delivery" owns the check rules. This script runs the checks
@@ -10,9 +14,10 @@ the change first. It prints one line for each check:
   SKIP        The check does not apply to this change.
   INCOMPLETE  The check applies but could not run.
 
-The exit status is 1 if any check fails. Otherwise it is 0.
+The exit status is 1 if any check fails. Otherwise it is 0. With --strict, an
+INCOMPLETE check also gives exit status 1.
 
-Usage: python3 scripts/check.py [--base REF]
+Usage: uv run --locked --script scripts/check.py [--base REF] [--strict]
 """
 
 from __future__ import annotations
@@ -420,7 +425,9 @@ def main() -> int:
         default="main",
         help="branch that the change merges into (default: main)",
     )
-    base = parser.parse_args().base
+    parser.add_argument("--strict", action="store_true", help="exit 1 if a check is INCOMPLETE")
+    args = parser.parse_args()
+    base = args.base
     note = "" if base_exists(base) else f" ({base} not found, so only staged changes count)"
     print(f"Checking the staged snapshot against {base}{note}.")
     results = [
@@ -436,7 +443,8 @@ def main() -> int:
         for detail in result.details:
             print(f"    {detail}")
     print('Not automated: prose rules, evidence and source links, and document roles (AGENTS.md "Before delivery").')
-    return 1 if any(result.status == "FAIL" for result in results) else 0
+    failing = {"FAIL", "INCOMPLETE"} if args.strict else {"FAIL"}
+    return 1 if any(result.status in failing for result in results) else 0
 
 
 if __name__ == "__main__":
