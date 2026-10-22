@@ -15,7 +15,7 @@ export async function createGestureRecognizer(
     assetBaseUrl // use the public/mediapipe folder of the web app
   ).href;
 
-  const vision = await FilesetResolver.forVisionTasks(runtimeUrl);
+  const vision = await FilesetResolver.forVisionTasks(runtimeUrl, true);
 
   // create recognizer, use model from mediapipe/gesture_recognizer.task
   return GestureRecognizer.createFromOptions(vision, {
