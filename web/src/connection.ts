@@ -44,7 +44,7 @@ export function connect(options: ConnectionOptions): Connection {
   const socket = openSocket();
   socket.onopen = () => {
     const hello: Hello = {
-      type: "hello", v: VERSION, seq: ++seq, t_ms: tabletClockMs(), role: "operator", client: options.client, user_agent: options.userAgent,
+      type: "hello", v: VERSION, seq: ++seq, t_ms: Math.round(tabletClockMs() * 10) / 10, role: "operator", client: options.client, user_agent: options.userAgent,
     };
     socket.send(JSON.stringify(hello));
   };

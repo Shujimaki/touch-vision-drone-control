@@ -38,6 +38,15 @@ describe("connection", () => {
     expect(states).toEqual(["connecting"]);
   });
 
+  it("rounds the tablet clock to 0.1 ms, as message format v1 requires", () => {
+    const socket = new FakeSocket();
+    connect({ openSocket: () => socket, tabletClockMs: () => 5321.74, client: "c", userAgent: "u", onState: () => {} });
+
+    socket.open();
+
+    expect(socket.sent[0]?.["t_ms"]).toBe(5321.7);
+  });
+
   it("is connected once welcome arrives, and keeps the host configuration", () => {
     const { socket, states, connection } = start();
     socket.open();

@@ -1,6 +1,7 @@
 export const VERSION = 1;
 
-export type Role = "operator" | "experimenter";
+const ROLES = ["operator", "experimenter"] as const;
+export type Role = (typeof ROLES)[number];
 
 export interface Hello {
   type: "hello"; v: 1; seq: number; t_ms: number;
@@ -28,7 +29,8 @@ export interface Welcome {
   session: string; role: Role; config: HostConfig;
 }
 
-export type ReplyCode = "invalid" | "version" | "busy" | "unknown_drone" | "not_allowed";
+const REPLY_CODES = ["invalid", "version", "busy", "unknown_drone", "not_allowed"] as const;
+export type ReplyCode = (typeof REPLY_CODES)[number];
 
 export interface Reply {
   type: "reply"; v: 1; seq: number; host_ms: number;
@@ -41,9 +43,8 @@ type Fields = Record<string, unknown>;
 const isObject = (x: unknown): x is Fields => typeof x === "object" && x !== null && !Array.isArray(x);
 const isNumber = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 const isString = (x: unknown): x is string => typeof x === "string";
-const isRole = (x: unknown): x is Role => x === "operator" || x === "experimenter";
-const isReplyCode = (x: unknown): x is ReplyCode =>
-  x === "invalid" || x === "version" || x === "busy" || x === "unknown_drone" || x === "not_allowed";
+const isRole = (x: unknown): x is Role => (ROLES as readonly unknown[]).includes(x);
+const isReplyCode = (x: unknown): x is ReplyCode => (REPLY_CODES as readonly unknown[]).includes(x);
 const numbers = (o: Fields, keys: string[]) => keys.every(k => isNumber(o[k]));
 const isRect = (x: unknown): x is Rect => isObject(x) && numbers(x, ["x_min", "x_max", "y_min", "y_max"]);
 const all = (x: unknown, ok: (item: unknown) => boolean) => Array.isArray(x) && x.every(ok);
