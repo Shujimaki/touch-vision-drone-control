@@ -1,0 +1,42 @@
+# Action versions checked on 2026-10-22: checkout v7.0.1, setup-node v7.1.0, setup-uv v10.3.0.
+# setup-uv has no floating major tag, so it is pinned to the v10.3.0 commit.
+name: Checks
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The title is untrusted input, so it reaches the shell only through an environment variable.
+      - run: python3 scripts/commit_title.py --title "$TITLE"
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: python3 scripts/check.py --strict --base "origin/$BASE_REF"
+        env:
+          BASE_REF: ${{ github.base_ref }}
