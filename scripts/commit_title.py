@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --locked --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
 """Check a commit message or a pull request title against the project's commit title rules.
 
 A title reads <type>(<scope>): <title>, with a type and an optional scope from the lists below.
@@ -8,8 +12,8 @@ The message carries no co-author or tool attribution line.
 The commit-msg hook in scripts/hooks/ runs this script on each commit. Install it once in each
 clone with `git config core.hooksPath scripts/hooks`.
 
-Usage: python3 scripts/commit_title.py --file MESSAGE_FILE
-       python3 scripts/commit_title.py --title "feat(web): add a thing"
+Usage: uv run --locked --script scripts/commit_title.py --file MESSAGE_FILE
+       uv run --locked --script scripts/commit_title.py --title "feat(web): add a thing"
 """
 
 from __future__ import annotations
