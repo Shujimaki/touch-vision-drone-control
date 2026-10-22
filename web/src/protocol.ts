@@ -42,6 +42,7 @@ export type HostMessage = Welcome | Reply;
 type Fields = Record<string, unknown>;
 const isObject = (x: unknown): x is Fields => typeof x === "object" && x !== null && !Array.isArray(x);
 const isNumber = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
+const isSeq = (x: unknown): x is number => isNumber(x) && Number.isInteger(x) && x >= 1;
 const isString = (x: unknown): x is string => typeof x === "string";
 const isRole = (x: unknown): x is Role => (ROLES as readonly unknown[]).includes(x);
 const isReplyCode = (x: unknown): x is ReplyCode => (REPLY_CODES as readonly unknown[]).includes(x);
@@ -66,11 +67,11 @@ export function parseHostMessage(data: unknown): HostMessage | null {
   if (!isString(data)) return null;
   let m: unknown;
   try { m = JSON.parse(data); } catch { return null; }
-  if (!isObject(m) || m["v"] !== VERSION || !numbers(m, ["seq", "host_ms"])) return null;
+  if (!isObject(m) || m["v"] !== VERSION || !isSeq(m["seq"]) || !isNumber(m["host_ms"])) return null;
   if (m["type"] === "welcome" && isString(m["session"]) && isRole(m["role"]) && isHostConfig(m["config"])) {
     return m as unknown as Welcome;
   }
-  if (m["type"] === "reply" && (m["ref"] === null || isNumber(m["ref"])) && typeof m["ok"] === "boolean"
+  if (m["type"] === "reply" && (m["ref"] === null || isSeq(m["ref"])) && typeof m["ok"] === "boolean"
     && (m["code"] === null || isReplyCode(m["code"])) && (m["detail"] === null || isString(m["detail"]))) {
     return m as unknown as Reply;
   }
