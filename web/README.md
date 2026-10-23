@@ -19,11 +19,11 @@ The interface responds to the operator, but only on screen. It is online at <htt
 
 ## What it does not do
 
-Nothing is simulated, and nothing is sent:
+Nothing is simulated, and the only messages are the connection handshake:
 
 - no flight, altitude change, sensor readings, collisions, or defensive hover;
 - no gesture recognition, and no trials that start or end;
-- no messages, no connection to a host, and no use of the message format in [`protocol/`](../protocol/).
+- no input, commands, or telemetry yet. The page connects to the Python command bridge, sends `hello`, and shows the connection state in the map's top-right corner. The drones on screen still come from the sample data.
 
 A dragged drone moves only on the map. Its sample sensor readings belong to its starting spot, so they clear once it moves.
 
@@ -39,7 +39,9 @@ npm ci
 npm run dev
 ```
 
-Open the address that Vite prints. `npm run build` writes a static copy to `dist/`, and `npm test` checks the components and that the page and the script stay in step.
+Open the address that Vite prints. `npm run build` writes a static copy to `dist/`, and `npm test` checks the components, the connection module, and that the page and the script stay in step.
+
+The page connects to the Python command bridge on `/ws` through `src/connection.ts`. The badge on the map reads "Connected" while the bridge runs and "No bridge" otherwise. The online copy has no bridge, so it always shows "No bridge". The [root README](../README.md#run-the-bridge-and-the-tablet-web-app) explains how to start the bridge and serve the page over HTTPS.
 
 ## Online copy
 

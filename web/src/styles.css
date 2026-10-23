@@ -406,6 +406,9 @@ html:has(.app[data-mode="compact"]),html:has(.app[data-mode="compact"]) body{ove
 .vtabs button[aria-selected="true"]{background:var(--grn-dim);color:var(--grn)}
 .tbtn2{height:38px;padding:0 12px;border:1px solid var(--grn-2);background:var(--grn-dim);color:var(--grn-tx);border-radius:var(--r);font-weight:700;font-size:13px;white-space:nowrap}
 .tbtn2:active{border-color:var(--grn)}
+.link{position:absolute;right:6px;top:6px;z-index:2;pointer-events:none;padding:3px 8px;background:var(--ovl);border:1px solid var(--line-2);border-radius:var(--r);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx-2);white-space:nowrap}
+.link[data-state="connected"]{color:var(--grn);border-color:var(--grn)}
+.link[data-state="disconnected"]{color:var(--crit);border-color:var(--crit)}
 .gear{width:38px;height:38px;display:grid;place-items:center;color:var(--tx-2);border:1px solid var(--line-2);border-radius:var(--r)}
 .gear[aria-expanded="true"]{color:var(--grn);border-color:var(--grn)}
 .side{padding:2px 0 2px 2px}
