@@ -6,7 +6,7 @@ call, so tests can drive time by hand.
 """
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from touch_vision_drone_control.drone_connection import (
@@ -46,8 +46,8 @@ class _Drone:
 class MockDroneConnection(DroneConnection):
     """A drone connection with simulated drones and no hardware.
 
-    `speed_limit_mps` is a placeholder (about 0.5 m/s). Drones start grounded,
-    1 m apart along x.
+    `speed_limit_mps` is a placeholder (about 0.5 m/s). Drones start grounded
+    at their `start` positions, or 1 m apart along x when `start` is not given.
     """
 
     def __init__(
@@ -56,15 +56,15 @@ class MockDroneConnection(DroneConnection):
         clock: Callable[[], float] = time.monotonic,
         speed_limit_mps: float = 0.5,
         takeoff_height_m: float = 0.5,
+        start: Mapping[str, Position] | None = None,
     ) -> None:
         self._clock = clock
         self._speed_limit_mps = speed_limit_mps
         self._takeoff_height_m = takeoff_height_m
         self._now = clock()
-        self._drones = {
-            name: _Drone(FlightState.GROUNDED, Position(float(i), 0.0, 0.0), None)
-            for i, name in enumerate(drones)
-        }
+        if start is None:
+            start = {name: Position(float(i), 0.0, 0.0) for i, name in enumerate(drones)}
+        self._drones = {name: _Drone(FlightState.GROUNDED, start[name], None) for name in drones}
 
     def takeoff(self, drones: list[str]) -> dict[str, Reply]:
         return self._move_vertically(drones, "takeoff", FlightState.TAKING_OFF, self._takeoff_height_m)

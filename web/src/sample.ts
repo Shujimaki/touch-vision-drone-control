@@ -26,6 +26,7 @@ export interface Drone {
   health: Health;
   blockPt?: [number, number] | null;             // where the finger is while a drag is rejected at the restricted zone
   gliding?: boolean;                              // moving on screen toward a target the operator dragged to
+  stale?: boolean;
   trail?: [number, number, number][];             // recent on-screen positions [x, y, ms], drawn as a fading trail
 }
 export interface LogEntry { t: number; text: string; k: LogKind; ses: string; tr: string }
