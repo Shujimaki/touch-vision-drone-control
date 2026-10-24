@@ -162,3 +162,12 @@ describe("drag glide (screen animation)", () => {
     glideStep(d, -0.01, 0); expect(d.x).toBe(x);
   });
 });
+
+describe("stale drone entity", () => {
+  it("is dimmed when its data is old, and drawn at full strength otherwise", () => {
+    const [d1] = sampleDrones(), view = fitView(600, 600, COURSE.arena), K = PAL.dark, R = { trig: 0.15, show: 0.6 };
+
+    expect(droneEntity({ ...d1!, stale: true }, COURSE, view, K, R)).toMatch(/^<g opacity="0.35">/);
+    expect(droneEntity(d1!, COURSE, view, K, R)).not.toContain('opacity="0.35"');
+  });
+});

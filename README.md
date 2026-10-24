@@ -5,7 +5,7 @@ The application combines touch positioning, hand gestures for altitude control, 
 
 ## Current status
 
-The project is in development. The tablet web app is a mockup that connects to the Python command bridge and shows the connection state. The bridge answers `hello` with `welcome` and checks the connection rules of [message format v1](protocol/README.md). The drone connection and its mock have a contract test suite. Nothing flies yet: there is no telemetry, input, or command handling.
+The project is in development. The tablet web app is a mockup that connects to the Python command bridge and shows the connection state. It draws each drone entity at its measured position from telemetry. The bridge answers `hello` with `welcome`, checks the connection rules of [message format v1](protocol/README.md), and sends `telemetry` from the mock drone connection at 30 Hz. The drone connection and its mock have a contract test suite. Nothing flies yet: there is no input or command handling.
 The repository contains no hardware compatibility or flight-performance test results.
 
 This README describes the planned software architecture, setup needs, dependencies, development steps, and tests.

@@ -1,7 +1,6 @@
 // Mockup of the tablet interface. Components draw the fixed sample data into index.html, and the UI responds to the
 // operator: drag drones on the map, pick the video, switch tabs and theme, filter the log. This file keeps only what
-// the operator changes on screen. Nothing is simulated (no flight, sensors, gestures or trials). The page connects to
-// the Python command bridge on /ws and shows the connection state. The drones still come from the sample data.
+// the operator changes on screen. Nothing is simulated (no flight, sensors, gestures or trials).
 import "./styles.css";
 import { COURSE, SAMPLE, sampleDrones, sampleLog, type TrialRecord } from "./sample";
 import { PAL, type Pal } from "./theme";
@@ -14,7 +13,8 @@ import { altitudeCard, dronesTable, healthTable, logView, trialCard } from "./co
 import { gestureStatus, heldAltitude } from "./components/panel";
 import { dragTarget } from "./zone";
 import { glideStep } from "./glide";
-import { connect, type ConnectionState } from "./connection";
+import { connect, linkLabel, type ConnectionState } from "./connection";
+import { applyTelemetry } from "./droneEntities";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -36,7 +36,9 @@ const ui = {
   logTrial: "all",
   settings: { zmin: 0.50, zmax: 1.44, rate: 0.20, dhtrig: 0.15, tlim: 300 },
   restrict: SAMPLE.trial.restrict,   // drags rejected at the restricted zone, shown in the Trial card
+  telemetrySeen: false,
 };
+let link: ConnectionState = { status: "connecting" };
 const log = sampleLog();
 const trials: TrialRecord[] = [{ id: SAMPLE.trial.id, session: SAMPLE.trial.session, t0: SAMPLE.trial.t0, t1: null, outcome: null, dh: 0, restrict: 0 }];
 let K: Pal = PAL.dark, view: View = fitView(600, 600, COURSE.arena);
@@ -55,7 +57,7 @@ function renderCourse(): void {
   byId("scaleBar").style.width = view.SC.toFixed(0) + "px";
   byId("mapStatic").innerHTML = courseLayer(course(), view, K);
 }
-const renderDrones = () => { byId("mapDyn").innerHTML = droneLayer(ui.drones, course(), view, K, readings(), performance.now()); };
+const renderDrones = () => { byId("mapDyn").innerHTML = ui.telemetrySeen ? droneLayer(ui.drones, course(), view, K, readings(), performance.now()) : ""; };
 
 function renderTapes(): void {
   const svg = byId("tapeSvg"), r = svg.getBoundingClientRect(), TW = Math.max(60, r.width), TH = Math.max(200, r.height);
@@ -180,7 +182,9 @@ mapSvg.addEventListener("pointermove", e => {
     log.push({ t: SAMPLE.now, text: `${U(d.id)} drag rejected: restricted zone`, k: "warn", ses: SAMPLE.trial.session, tr: SAMPLE.trial.id });
   }
   d.blockPt = to.blocked ? [fx, fy] : null;
-  d.tx = to.x; d.ty = to.y; d.gliding = true;
+  d.tx = to.x; d.ty = to.y;
+  if (followsTelemetry()) { renderSoon(); return; }
+  d.gliding = true;
   d.ranges = {}; d.below = null;                              // the sample readings belong to the old spot
   startGlide();
 });
@@ -315,10 +319,34 @@ new ResizeObserver(() => requestAnimationFrame(renderAll)).observe(byId("mapbody
 syncSettings();
 layout();
 
-const LINK_LABEL: Record<ConnectionState["status"], string> = { connecting: "Connecting", connected: "Connected", disconnected: "No bridge" };
+function showLink(state: ConnectionState): void {
+  link = state;
+  const { headline, detail } = linkLabel(state), detailEl = byId("linkDetail");
+  byId("linkState").dataset["state"] = state.status; byId("linkHead").textContent = headline;
+  detailEl.textContent = detail ?? ""; detailEl.hidden = detail === null;
+  if (state.status === "failed") { for (const d of ui.drones) d.stale = true; renderSoon(); }
+}
+// TODO(#20): the connection module releases every finger hold itself once it owns them.
+function releaseAll(): void {
+  pointers.clear();
+  for (const d of ui.drones) { d.held = false; d.blockPt = null; }
+  followVideo(); renderSoon();
+}
+const followsTelemetry = () => link.status === "connected";
+const replaceSampleHolds = () => { for (const d of ui.drones) d.held = [...pointers.values()].some(p => p.id === d.id); };
+const unknownDrones = new Set<string>();
 connect({
   tabletClockMs: () => performance.now(),
   client: "tablet-web 0.1.0",
   userAgent: navigator.userAgent,
-  onState: ({ status }) => { const el = byId("linkState"); el.dataset["state"] = status; el.textContent = LINK_LABEL[status]; },
+  onState: showLink,
+  onTelemetry: t => {
+    if (link.status !== "connected") return;
+    if (!ui.telemetrySeen) replaceSampleHolds();
+    for (const id of applyTelemetry(ui.drones, t, link.welcome.config.stale_position_ms)) {
+      if (!unknownDrones.has(id)) { unknownDrones.add(id); console.warn(`telemetry names ${id}, which the map has no drone entity for`); }
+    }
+    ui.telemetrySeen = true; renderSoon();
+  },
+  onHostLost: releaseAll,
 });
