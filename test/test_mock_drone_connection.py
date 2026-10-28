@@ -22,3 +22,16 @@ def test_mock_never_exceeds_its_speed_limit() -> None:
         previous = report.position
 
     assert target_sent
+
+
+def test_a_mock_drone_takes_off_straight_up_from_its_start_position() -> None:
+    clock = FakeClock()
+    mock = MockDroneConnection(["cf1", "cf2"], clock=clock, start={"cf1": Position(2.35, 0.6, 0.0), "cf2": Position(2.65, 0.6, 0.0)})
+
+    mock.takeoff(["cf2"])
+    clock.advance(10.0)
+
+    assert [(r.drone, r.state, r.position) for r in mock.reports()] == [
+        ("cf1", FlightState.GROUNDED, Position(2.35, 0.6, 0.0)),
+        ("cf2", FlightState.FLYING, Position(2.65, 0.6, 0.5)),
+    ]
