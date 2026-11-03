@@ -17,6 +17,7 @@ import { glideStep } from "./glide";
 import { connect, linkLabel, type ConnectionState } from "./connection";
 import { applyTelemetry } from "./droneEntities";
 import { startGestureClient, type GestureClient } from "./gestureClient";
+import { GestureController } from "./gestureControl";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -40,6 +41,7 @@ const ui = {
   restrict: SAMPLE.trial.restrict,   // drags rejected at the restricted zone, shown in the Trial card
   telemetrySeen: false,
   gestureClient: null as GestureClient | null,
+  gestureController: null as GestureController | null,
 };
 let link: ConnectionState = { status: "connecting" };
 const log = sampleLog();
@@ -279,8 +281,12 @@ async function toggleCamera(): Promise<void> {
   const video = byId<HTMLVideoElement>("camVideo");
 
   if (ui.camera) {
+    ui.gestureController?.reset();
+    ui.gestureController = null;
+
     ui.gestureClient?.stop();
     ui.gestureClient = null;
+
     ui.camera.getTracks().forEach(track => track.stop());
     ui.camera = null;
     video.srcObject = null;
@@ -300,9 +306,18 @@ async function toggleCamera(): Promise<void> {
     video.srcObject = ui.camera;
     await video.play().catch(() => {});
 
+    ui.gestureController = new GestureController({
+      maxRateMps: ui.settings.rate, // speed limit set in settings
+      deadBand: 0.04, // ignore tiny wrist movements (about 4% of image)
+      fullRateDisplacement: 0.25 // reach max speed after moving about 25% of the image
+    });
+
     ui.gestureClient = startGestureClient({
       video,
-      onResult: result => console.log("MediaPipe:", result),
+      onResult: result => {
+        const control = ui.gestureController!.update(result);
+        console.log("MediaPipe:", result, "Gesture control:", control);
+      },
       onError: message => cameraNote(`Gesture recognition: ${message}`)
     });
   }
