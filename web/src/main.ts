@@ -1,6 +1,6 @@
 // Mockup of the tablet interface. Components draw the fixed sample data into index.html, and the UI responds to the
 // operator: drag drones on the map, pick the video, switch tabs and theme, filter the log. This file keeps only what
-// the operator changes on screen. Nothing is simulated (no flight, sensors, gestures or trials) and no messages are sent.
+// The UI uses sample data for flight, sensors and trials. MediaPipe recognizes gestures locally; no flight commands or network messages are sent.
 import "./styles.css";
 import { COURSE, SAMPLE, sampleDrones, sampleLog, type TrialRecord } from "./sample";
 import { PAL, type Pal } from "./theme";
@@ -13,6 +13,7 @@ import { altitudeCard, dronesTable, healthTable, logView, trialCard } from "./co
 import { gestureStatus, heldAltitude } from "./components/panel";
 import { dragTarget } from "./zone";
 import { glideStep } from "./glide";
+import { startGestureClient, type GestureClient } from "./gestureClient";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -34,6 +35,7 @@ const ui = {
   logTrial: "all",
   settings: { zmin: 0.50, zmax: 1.44, rate: 0.20, dhtrig: 0.15, tlim: 300 },
   restrict: SAMPLE.trial.restrict,   // drags rejected at the restricted zone, shown in the Trial card
+  gestureClient: null as GestureClient | null,
 };
 const log = sampleLog();
 const trials: TrialRecord[] = [{ id: SAMPLE.trial.id, session: SAMPLE.trial.session, t0: SAMPLE.trial.t0, t1: null, outcome: null, dh: 0, restrict: 0 }];
@@ -256,21 +258,57 @@ byId("btnTakeoff").addEventListener("click", () => {
   ui.stopped = false; estop.classList.remove("fired"); byId("estopTitle").textContent = "E-STOP"; byId("estopSub").textContent = "Hold 1 s";
 });
 
-// Hand camera: a plain preview of the front camera. There is no gesture recognition in the mockup.
-function cameraNote(text: string): void { const n = byId("camNote"); n.hidden = !text; n.textContent = text; }
-async function toggleCamera(): Promise<void> {
-  const btn = byId("camBtn"), video = byId<HTMLVideoElement>("camVideo");
-  if (ui.camera) { ui.camera.getTracks().forEach(t => t.stop()); ui.camera = null; }
-  else {
-    try { ui.camera = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false }); }
-    catch { cameraNote("The camera is not available. Allow camera access for this page, then tap the camera icon."); return; }
-    video.srcObject = ui.camera; await video.play().catch(() => {});
-  }
-  const on = !!ui.camera;
-  video.hidden = !on; byId("camSvg").style.display = on ? "none" : ""; cameraNote("");
-  btn.classList.toggle("on", on); btn.setAttribute("aria-pressed", String(on));
+// Hand camera: live preview and local gesture recognition. No altitude commands yet.
+function cameraNote(text: string): void {
+  const n = byId("camNote");
+  n.hidden = !text;
+  n.textContent = text;
 }
-byId("camBtn").addEventListener("click", () => { void toggleCamera(); });
+
+async function toggleCamera(): Promise<void> {
+  const btn = byId("camBtn");
+  const video = byId<HTMLVideoElement>("camVideo");
+
+  if (ui.camera) {
+    ui.gestureClient?.stop();
+    ui.gestureClient = null;
+    ui.camera.getTracks().forEach(track => track.stop());
+    ui.camera = null;
+    video.srcObject = null;
+  } else {
+    try {
+      ui.camera = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+        audio: false
+      });
+    } catch {
+      cameraNote(
+        "The camera is not available. Allow camera access for this page, then tap the camera icon."
+      );
+      return;
+    }
+
+    video.srcObject = ui.camera;
+    await video.play().catch(() => {});
+
+    ui.gestureClient = startGestureClient({
+      video,
+      onResult: result => console.log("MediaPipe:", result),
+      onError: message => cameraNote(`Gesture recognition: ${message}`)
+    });
+  }
+
+  const on = !!ui.camera;
+  video.hidden = !on;
+  byId("camSvg").style.display = on ? "none" : "";
+  cameraNote("");
+  btn.classList.toggle("on", on);
+  btn.setAttribute("aria-pressed", String(on));
+}
+
+byId("camBtn").addEventListener("click", () => {
+  void toggleCamera();
+});
 
 // ---------- settings: display only ----------
 type StepKey = keyof typeof ui.settings;
