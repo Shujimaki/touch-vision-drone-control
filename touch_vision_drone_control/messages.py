@@ -31,8 +31,11 @@ class Held(_Strict):
     follow: bool
 
 
+GestureState = Literal["idle", "confirming", "active", "locked", "hand_loss", "unrecognized"]
+
+
 class Gesture(_Strict):
-    state: Literal["idle", "confirming", "active", "locked", "hand_loss", "unrecognized"]
+    state: GestureState
     rate: float
     neutral_y: Fraction | None
 

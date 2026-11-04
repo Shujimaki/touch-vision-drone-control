@@ -11,7 +11,7 @@ import { handFrame } from "./components/handCamera";
 import { batteryClass, batteryWidth, feedScene, feedTile, flightState } from "./components/videoFeed";
 import { altitudeCard, dronesTable, healthTable, logView, trialCard } from "./components/telemetry";
 import { gestureStatus, heldAltitude } from "./components/panel";
-import { dragTarget } from "./zone";
+import { acceptedTarget } from "./zone";
 import { glideStep } from "./glide";
 import { connect, linkLabel, type ConnectionState } from "./connection";
 import { applyTelemetry } from "./droneEntities";
@@ -157,6 +157,7 @@ mapSvg.addEventListener("pointerdown", e => {
   if (!g) return;
   const d = drone(g.dataset["drone"]!);
   if ([...pointers.values()].some(p => p.id === d.id)) return;
+  if (followsTelemetry() && !bridge.hold(e, d.id)) return;
   e.preventDefault(); mapSvg.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { id: d.id, x0: e.clientX, y0: e.clientY, moved: false });
   d.held = true; ui.holdOrder = [...ui.holdOrder.filter(x => x !== d.id), d.id]; followVideo(); renderSoon();
@@ -172,10 +173,10 @@ mapSvg.addEventListener("pointermove", e => {
   if (!p.moved && Math.hypot(e.clientX - p.x0, e.clientY - p.y0) < 6) return;
   p.moved = true;
   const m = a.margin, fx = clamp(mx, a.xMin + m, a.xMax - m), fy = clamp(my, a.yMin + m, a.yMax - m);
-  // the finger sets the drone's target and the drone glides to it (REQ-02). The sample trial is running, so neither the
-  // target nor the straight line the drone takes to it may enter the restricted zone (REQ-08)
-  const aim = dragTarget(d.tx, d.ty, fx, fy, COURSE.zone), path = dragTarget(d.x, d.y, aim.x, aim.y, COURSE.zone);
-  const to = { x: path.x, y: path.y, blocked: aim.blocked || path.blocked };
+  const to = followsTelemetry()
+    ? bridge.drag({ pointerId: e.pointerId, timeStamp: e.timeStamp, x: mx, y: my })
+    : acceptedTarget({ x: d.tx, y: d.ty }, d, fx, fy, COURSE.zone);
+  if (!to) return;
   if (to.blocked && !d.blockPt) {
     ui.restrict++; trials[0]!.restrict = ui.restrict;
     log.push({ t: SAMPLE.now, text: `${U(d.id)} drag rejected: restricted zone`, k: "warn", ses: SAMPLE.trial.session, tr: SAMPLE.trial.id });
@@ -211,7 +212,7 @@ function glide(now: number): void {
 function release(e: PointerEvent): void {
   const p = pointers.get(e.pointerId);
   if (!p) return;
-  pointers.delete(e.pointerId); const d = drone(p.id); d.held = false; d.blockPt = null; followVideo(); renderSoon();
+  pointers.delete(e.pointerId); bridge.lift(e.pointerId); const d = drone(p.id); d.held = false; d.blockPt = null; followVideo(); renderSoon();
 }
 mapSvg.addEventListener("pointerup", release);
 mapSvg.addEventListener("pointercancel", release);
@@ -327,7 +328,6 @@ function showLink(state: ConnectionState): void {
   detailEl.textContent = detail ?? ""; detailEl.hidden = detail === null;
   if (state.status === "failed") { for (const d of ui.drones) d.stale = true; renderSoon(); }
 }
-// TODO(#20): the connection module releases every finger hold itself once it owns them.
 function releaseAll(): void {
   pointers.clear();
   for (const d of ui.drones) { d.held = false; d.blockPt = null; }
@@ -336,7 +336,7 @@ function releaseAll(): void {
 const followsTelemetry = () => link.status === "connected";
 const replaceSampleHolds = () => { for (const d of ui.drones) d.held = [...pointers.values()].some(p => p.id === d.id); };
 const unknownDrones = new Set<string>();
-connect({
+const bridge = connect({
   tabletClockMs: () => performance.now(),
   client: "tablet-web 0.1.0",
   userAgent: navigator.userAgent,
