@@ -89,11 +89,15 @@ const gesture: Gesture = live === null
   ? SAMPLE.gesture
   : live.mode === "locked"
     ? "locked"
-    : live.mode === "waiting"
-      ? "idle"
-      : live.rateMps < 0
-        ? "descend"
-        : "climb";
+    : live.mode === "confirming"
+      ? "confirming"
+      : live.mode === "unrecognized"
+        ? "unrecognized"
+        : live.mode === "waiting"
+          ? "idle"
+          : live.rateMps < 0
+            ? "descend"
+            : "climb";
 const rate = live === null ? SAMPLE.appliedRate : live.rateMps;
 const gs = gestureStatus(gesture, held, rate);  byId("gstat").dataset["k"] = gs.k; byId("gMain").textContent = gs.main; byId("gSub").textContent = gs.sub;
   byId("heldAlt").innerHTML = heldAltitude(held);
@@ -315,14 +319,17 @@ async function toggleCamera(): Promise<void> {
 
     ui.gestureController = new GestureController({
       maxRateMps: ui.settings.rate, // speed limit set in settings
-      deadBand: 0.04, // ignore tiny wrist movements (about 4% of image)
-      fullRateDisplacement: 0.25 // reach max speed after moving about 25% of the image
+      minConfidence: 0.5, // only use a confident gesture
+      confirmMs: 500, // hold palm steady before control starts
+      stillThreshold: 0.04, // restart if the wrist moves during confirmation
+      deadBand: 0.03, // ignore tiny wrist movements
+      fullRateDisplacement: 0.18 // reach max speed after about 18% of the image
     });
 
     ui.gestureClient = startGestureClient({
       video,
-      onResult: result => {
-         const control = ui.gestureController!.update(result);
+      onResult: (result, tMs) => {
+        const control = ui.gestureController!.update(result, tMs);
           ui.liveControl = control;
           renderSoon();
           console.log("MediaPipe:", result, "Gesture control:", control);
