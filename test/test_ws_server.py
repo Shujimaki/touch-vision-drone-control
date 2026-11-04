@@ -415,15 +415,15 @@ async def test_takeoff_with_malformed_args_gets_invalid_and_nothing_moves(connec
     assert (await telemetry_until(ws, clock, "grounded"))["z"] == 0.0
 
 
-async def test_takeoff_from_an_experimenter_gets_not_allowed(connect, clock) -> None:
+async def test_an_experimenter_can_take_off_a_drone(connect, clock) -> None:
     ws = await connect()
     await say_hello(ws, role="experimenter")
 
     await ws.send_json(command("takeoff", 2, ["cf7"]))
     reply = await receive_reply(ws)
 
-    assert (reply["ref"], reply["code"]) == (2, "not_allowed")
-    assert (await telemetry_until(ws, clock, "grounded"))["z"] == 0.0
+    assert (reply["ref"], reply["ok"], reply["code"]) == (2, True, None)
+    assert (await telemetry_until(ws, clock, "taking_off"))["id"] == "cf7"
 
 
 @pytest.mark.parametrize("name", ["stop", "stop_reset", "set_mode", "trial_start", "trial_end"])

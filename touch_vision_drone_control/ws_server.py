@@ -163,7 +163,7 @@ class _Connection:
                 await self._reject(ref, "invalid", "hello was already received")
             case Hello():
                 await self._welcome(message, ref)
-            case Input() | Event() | Command(name="takeoff" | "land") if not self._app[OPERATOR].held_by(self):
+            case Input() | Event() if not self._app[OPERATOR].held_by(self):
                 detail = f"only the operator sends {message.type}"
                 await self._reject(ref, "not_allowed", detail, input_stream=isinstance(message, Input))
             case Command(name="takeoff" | "land"):
