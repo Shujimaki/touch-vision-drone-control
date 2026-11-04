@@ -5,7 +5,7 @@ import "./styles.css";
 import { COURSE, SAMPLE, sampleDrones, sampleLog, type TrialRecord } from "./sample";
 import { PAL, type Pal } from "./theme";
 import { U, batteryLevel, clamp, fmtMS, sg } from "./format";
-import { TRAIL_MS, airborne, courseLayer, droneLayer, fitView, toCourse, type View } from "./components/map";
+import { TRAIL_MS, courseLayer, droneLayer, fitView, toCourse, type View } from "./components/map";
 import { altitudeBars } from "./components/altitude";
 import { handFrame } from "./components/handCamera";
 import { batteryClass, batteryWidth, feedScene, feedTile, flightState } from "./components/videoFeed";
@@ -85,8 +85,7 @@ function renderPanel(): void {
   const held = heldDrones(), gs = gestureStatus(SAMPLE.gesture, held, SAMPLE.appliedRate);
   byId("gstat").dataset["k"] = gs.k; byId("gMain").textContent = gs.main; byId("gSub").textContent = gs.sub;
   byId("heldAlt").innerHTML = heldAltitude(held);
-  // one button for the selected drone: Land while it flies, Take off while it is grounded
-  const v = drone(ui.video), up = v.z > 0.02;
+  const v = drone(ui.video), up = v.state !== "grounded";
   byId("btnLandSel").hidden = !up; byId("btnTakeoffSel").hidden = up;
   document.querySelectorAll<HTMLElement>("#btnTakeoffSel small, #btnLandSel small").forEach(s => { s.textContent = U(v.id); });
   // battery and signal on each video button
@@ -169,7 +168,7 @@ mapSvg.addEventListener("pointermove", e => {
   if (!p) return;
   e.preventDefault();
   const d = drone(p.id);
-  if (!airborne(d)) return;                                   // a grounded drone can be held, not moved
+  if (d.state !== "flying") return;
   if (!p.moved && Math.hypot(e.clientX - p.x0, e.clientY - p.y0) < 6) return;
   p.moved = true;
   const m = a.margin, fx = clamp(mx, a.xMin + m, a.xMax - m), fy = clamp(my, a.yMin + m, a.yMax - m);
@@ -257,6 +256,8 @@ function estopCancel(): void {
 estop.addEventListener("pointerdown", e => { if (ui.stopped) return; estop.setPointerCapture(e.pointerId); holdStart = performance.now(); holdFrame = requestAnimationFrame(estopTick); });
 estop.addEventListener("pointerup", estopCancel);
 estop.addEventListener("pointercancel", estopCancel);
+byId("btnTakeoffSel").addEventListener("click", () => { if (link.status === "connected") link.command("takeoff", [ui.video]); });
+byId("btnLandSel").addEventListener("click", () => { if (link.status === "connected") link.command("land", [ui.video]); });
 byId("btnTakeoff").addEventListener("click", () => {
   if (!ui.stopped) return;
   ui.stopped = false; estop.classList.remove("fired"); byId("estopTitle").textContent = "E-STOP"; byId("estopSub").textContent = "Hold 1 s";

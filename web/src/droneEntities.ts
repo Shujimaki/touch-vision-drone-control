@@ -7,6 +7,7 @@ export function applyTelemetry(drones: Drone[], telemetry: Telemetry, staleMs: n
   for (const t of telemetry.drones) {
     const d = drones.find(e => e.id === t.id);
     if (!d) { unknown.push(t.id); continue; }
+    d.state = t.state;
     const { x, y, z } = t, measured = x !== null && y !== null && z !== null;
     if (measured) { d.x = x; d.y = y; d.z = z; }
     d.stale = !measured || t.pos_age_ms === null || t.pos_age_ms > staleMs;

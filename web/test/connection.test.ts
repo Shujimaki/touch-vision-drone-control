@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { connect, linkLabel, socketUrl, type ConnectionState, type SocketLike } from "../src/connection";
-import { parseHostMessage, type Welcome } from "../src/protocol";
+import { connect, linkLabel, socketUrl, type Connection, type ConnectionState, type SocketLike } from "../src/connection";
+import { parseHostMessage, type FlightCommand, type Welcome } from "../src/protocol";
 
 const examples = join(import.meta.dirname, "..", "..", "protocol", "examples");
 const example = (name: string): Record<string, unknown> => JSON.parse(readFileSync(join(examples, name + ".json"), "utf8"));
@@ -38,6 +38,12 @@ function start() {
 const TELEMETRY = example("telemetry-cf3-defensive-hover");
 const WELCOME = example("welcome");
 const TELEMETRY_TIMEOUT_MS = (WELCOME["config"] as { telemetry_timeout_ms: number }).telemetry_timeout_ms;
+
+function command(connection: Connection, name: FlightCommand): void {
+  const state = connection.state();
+  if (state.status !== "connected") throw new Error(`expected a connected state, got ${state.status}`);
+  state.command(name, ["cf1"]);
+}
 
 function connected() {
   const c = start();
@@ -229,6 +235,27 @@ describe("connection", () => {
     expect(connection.state()).toEqual({ status: "failed", cause: "bridge_lost" });
   });
 
+  it("sends a command with the next seq once connected", () => {
+    const { socket, connection } = connected();
+
+    command(connection, "takeoff");
+
+    expect(socket.sent[1]).toEqual({ ...example("command-takeoff"), seq: 2, t_ms: 5321.7, args: { drones: ["cf1"] } });
+  });
+
+  it("numbers commands from 2 again on a new socket", () => {
+    const { latest, connection } = connected();
+    command(connection, "takeoff");
+    latest().bridgeCloses();
+    vi.advanceTimersByTime(1000);
+    latest().open();
+    latest().receive(WELCOME);
+
+    command(connection, "land");
+
+    expect(latest().sent.map(m => [m["type"], m["seq"]])).toEqual([["hello", 1], ["command", 2]]);
+  });
+
   it("ignores telemetry before welcome", () => {
     const { socket, telemetry } = start();
     socket.open();
@@ -282,7 +309,7 @@ function parsedWelcome(): Welcome {
 describe("linkLabel", () => {
   it.each<[ConnectionState, string, string | null]>([
     [{ status: "connecting" }, "Connecting", null],
-    [{ status: "connected", welcome: parsedWelcome() }, "Connected", null],
+    [{ status: "connected", welcome: parsedWelcome(), command: () => {} }, "Connected", null],
     [{ status: "failed", cause: "bridge_lost" }, "Connection failed", "Bridge lost, retrying"],
     [{ status: "failed", cause: "no_bridge" }, "Connection failed", "No bridge, retrying"],
     [{ status: "failed", cause: "operator_busy" }, "Connection failed", "Operator busy, retrying"],
