@@ -2,7 +2,7 @@
 // operator: drag drones on the map, pick the video, switch tabs and theme, filter the log. This file keeps only what
 // The UI uses sample data for flight, sensors and trials. MediaPipe recognizes gestures locally; no flight commands or network messages are sent.
 import "./styles.css";
-import { COURSE, SAMPLE, sampleDrones, sampleLog, type TrialRecord } from "./sample";
+import { COURSE, SAMPLE, sampleDrones, sampleLog, type Gesture, type TrialRecord } from "./sample";
 import { PAL, type Pal } from "./theme";
 import { U, batteryLevel, clamp, fmtMS, sg } from "./format";
 import { TRAIL_MS, airborne, courseLayer, droneLayer, fitView, toCourse, type View } from "./components/map";
@@ -14,7 +14,7 @@ import { gestureStatus, heldAltitude } from "./components/panel";
 import { dragTarget } from "./zone";
 import { glideStep } from "./glide";
 import { startGestureClient, type GestureClient } from "./gestureClient";
-import { GestureController } from "./gestureControl";
+import { GestureController, type GestureControlState } from "./gestureControl";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -38,6 +38,7 @@ const ui = {
   restrict: SAMPLE.trial.restrict,   // drags rejected at the restricted zone, shown in the Trial card
   gestureClient: null as GestureClient | null,
   gestureController: null as GestureController | null,
+  liveControl: null as GestureControlState | null,
 };
 const log = sampleLog();
 const trials: TrialRecord[] = [{ id: SAMPLE.trial.id, session: SAMPLE.trial.session, t0: SAMPLE.trial.t0, t1: null, outcome: null, dh: 0, restrict: 0 }];
@@ -82,8 +83,19 @@ function renderFeeds(): void {
 }
 
 function renderPanel(): void {
-  const held = heldDrones(), gs = gestureStatus(SAMPLE.gesture, held, SAMPLE.appliedRate);
-  byId("gstat").dataset["k"] = gs.k; byId("gMain").textContent = gs.main; byId("gSub").textContent = gs.sub;
+const held = heldDrones();
+const live = ui.liveControl;
+const gesture: Gesture = live === null
+  ? SAMPLE.gesture
+  : live.mode === "locked"
+    ? "locked"
+    : live.mode === "waiting"
+      ? "idle"
+      : live.rateMps < 0
+        ? "descend"
+        : "climb";
+const rate = live === null ? SAMPLE.appliedRate : live.rateMps;
+const gs = gestureStatus(gesture, held, rate);  byId("gstat").dataset["k"] = gs.k; byId("gMain").textContent = gs.main; byId("gSub").textContent = gs.sub;
   byId("heldAlt").innerHTML = heldAltitude(held);
   // one button for the selected drone: Land while it flies, Take off while it is grounded
   const v = drone(ui.video), up = v.z > 0.02;
@@ -274,6 +286,8 @@ async function toggleCamera(): Promise<void> {
   if (ui.camera) {
     ui.gestureController?.reset();
     ui.gestureController = null;
+    ui.liveControl = null;
+    renderSoon();
 
     ui.gestureClient?.stop();
     ui.gestureClient = null;
@@ -297,6 +311,8 @@ async function toggleCamera(): Promise<void> {
     video.srcObject = ui.camera;
     await video.play().catch(() => {});
 
+
+
     ui.gestureController = new GestureController({
       maxRateMps: ui.settings.rate, // speed limit set in settings
       deadBand: 0.04, // ignore tiny wrist movements (about 4% of image)
@@ -306,8 +322,10 @@ async function toggleCamera(): Promise<void> {
     ui.gestureClient = startGestureClient({
       video,
       onResult: result => {
-        const control = ui.gestureController!.update(result);
-        console.log("MediaPipe:", result, "Gesture control:", control);
+         const control = ui.gestureController!.update(result);
+          ui.liveControl = control;
+          renderSoon();
+          console.log("MediaPipe:", result, "Gesture control:", control);
       },
       onError: message => cameraNote(`Gesture recognition: ${message}`)
     });
