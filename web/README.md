@@ -8,7 +8,7 @@ Components in `src/components/` draw fixed sample data from `src/sample.ts`: one
 
 The interface responds to the operator, but only on screen. It is online at <https://shujimaki.github.io/touch-vision-drone-control/>.
 
-- **Map:** hold a drone with a finger and drag it. The finger sets the drone's target. Without a bridge, the drone glides there on screen with a short trail. While connected, only the target marker follows the finger, and telemetry places the drone entity. Several fingers can hold several drones. A released drone stays at its last target. A grounded drone can be held but not moved. A held drone is drawn filled.
+- **Map:** hold a drone with a finger and drag it. The finger sets the drone's target. Without a bridge, the drone glides there on screen with a short trail. While connected, the tablet sends the target to the bridge in `input` 30 times a second. The target marker follows the finger, and telemetry places the drone entity as the drone flies there. Only a flying drone can be held while connected, and a released drone holds the position where it was released. Without a bridge, several fingers can hold several drones, a released drone stays at its last target, and a grounded drone can be held but not moved. A held drone is drawn filled.
 - **Restricted zone:** the sample moment is during a trial, so a drag into the zone or its margin is rejected (REQ-08). The drone stops at the edge, a red trace points at the finger, and the event log and the Trial card count the rejection.
 - **Video:** the feed follows the drone touched most recently while it is held. The buttons 1, 2 and 3 also choose it, and show each drone's battery and signal.
 - **Selected drone:** the Take off / Land button, the held-altitude list, the altitude bars, and the Telemetry tables follow what the operator holds and moves.
@@ -20,11 +20,11 @@ The interface responds to the operator, but only on screen. It is online at <htt
 
 ## What it does not do
 
-The tablet simulates nothing itself. The only messages are the connection handshake, takeoff and land commands, and telemetry:
+The tablet simulates nothing itself. The only messages are the connection handshake, takeoff and land commands, input, and telemetry:
 
-- no drag that moves a drone, no altitude change, sensor readings, collisions, or defensive hover;
-- no gesture recognition, and no trials that start or end;
-- no input yet, and no stop or trial commands. The page shows the connection state in the map's top-right corner. It draws each drone entity at its measured position from telemetry. The other panels still show the sample data.
+- no altitude change, sensor readings, collisions, or defensive hover;
+- no gesture recognition, and no trials that start or end. The input's altitude channel always reports `idle` with rate 0;
+- no events, and no stop or trial commands. The page shows the connection state in the map's top-right corner. It draws each drone entity at its measured position from telemetry. The other panels still show the sample data.
 
 Without a bridge, a dragged drone moves only on the map. Its sample sensor readings belong to its starting spot, so they clear once it moves.
 
