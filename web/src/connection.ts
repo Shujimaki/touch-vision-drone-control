@@ -1,10 +1,10 @@
-import { VERSION, parseHostMessage, type Hello, type Reply, type Telemetry, type Welcome } from "./protocol";
+import { VERSION, parseHostMessage, type Command, type FlightCommand, type Hello, type Reply, type Telemetry, type Welcome } from "./protocol";
 
 export type FailureCause = "bridge_lost" | "no_bridge" | "operator_busy" | "version_mismatch" | "rejected";
 
 export type ConnectionState =
   | { status: "connecting" }
-  | { status: "connected"; welcome: Welcome }
+  | { status: "connected"; welcome: Welcome; command: (name: FlightCommand, drones: string[]) => void }
   | { status: "failed"; cause: FailureCause };
 
 export interface SocketLike {
@@ -64,6 +64,7 @@ export function connect(options: ConnectionOptions): Connection {
   let state: ConnectionState = { status: "connecting" }, everConnected = false;
   const setState = (next: ConnectionState) => { state = next; onState(state); };
   const lostCause = (): FailureCause => everConnected ? "bridge_lost" : "no_bridge";
+  const tabletMs = () => Math.round(tabletClockMs() * 10) / 10;
 
   function attempt(): void {
     const socket = openSocket();
@@ -88,7 +89,11 @@ export function connect(options: ConnectionOptions): Connection {
       if (message === null) warn(`ignored a message from the bridge: ${String(data).slice(0, 120)}`);
       else if (message.type === "welcome") {
         everConnected = true;
-        setState({ status: "connected", welcome: message });
+        const command = (name: FlightCommand, drones: string[]) => {
+          const message: Command = { type: "command", v: VERSION, seq: ++seq, t_ms: tabletMs(), name, args: { drones } };
+          socket.send(JSON.stringify(message));
+        };
+        setState({ status: "connected", welcome: message, command });
         expectTelemetryWithin(message.config.telemetry_timeout_ms);
       } else if (message.type === "telemetry") {
         if (state.status !== "connected") return;
@@ -102,7 +107,7 @@ export function connect(options: ConnectionOptions): Connection {
 
     socket.onopen = () => {
       const hello: Hello = {
-        type: "hello", v: VERSION, seq: ++seq, t_ms: Math.round(tabletClockMs() * 10) / 10, role: "operator", client: options.client, user_agent: options.userAgent,
+        type: "hello", v: VERSION, seq: ++seq, t_ms: tabletMs(), role: "operator", client: options.client, user_agent: options.userAgent,
       };
       socket.send(JSON.stringify(hello));
     };

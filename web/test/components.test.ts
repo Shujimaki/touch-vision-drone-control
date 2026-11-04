@@ -67,6 +67,13 @@ describe("panels", () => {
     expect(flightState(d2!, 0.12)[0]).toBe("Moving");
     expect(flightState(d3!, 0.12)[0]).toBe("Grounded");
   });
+  it("names the flight state the bridge reports while a drone takes off, lands, or is stopped", () => {
+    const [d1] = sampleDrones();
+    expect(flightState({ ...d1!, state: "taking_off" }, 0)[0]).toBe("Taking off");
+    expect(flightState({ ...d1!, state: "landing" }, 0)[0]).toBe("Landing");
+    expect(flightState({ ...d1!, state: "stopped" }, 0)[0]).toBe("Stopped");
+    expect(flightState({ ...d1!, state: "grounded" }, 0)[0]).toBe("Grounded");
+  });
 });
 
 describe("telemetry", () => {
@@ -78,6 +85,11 @@ describe("telemetry", () => {
     const cells = [...row.matchAll(/<td[^>]*>([^<]*)/g)].map(m => m[1]!), ranges = cells.slice(14, 19);
     const d1 = sampleDrones()[0]!;
     RANGE_COLS.forEach((k, i) => expect(ranges[i], k).toBe(d1.ranges[k]!.toFixed(2)));
+  });
+  it("shows each drone's flight state in the state column", () => {
+    const drones = sampleDrones().map(d => ({ ...d, state: "landing" as const }));
+    const states = dronesTable(drones, 0.15, 0.60).split("<tr>").filter(r => r.includes("DRONE")).map(r => [...r.matchAll(/<td[^>]*>([^<]*)/g)][1]![1]);
+    expect(states).toEqual(["landing", "landing", "landing"]);
   });
   const trials: TrialRecord[] = [{ id: "S1-T1", session: "S1", t0: 821, t1: null, outcome: null, dh: 0, restrict: 0 }];
   it("filters the event log by session, then by trial", () => {

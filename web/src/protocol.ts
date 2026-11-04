@@ -8,6 +8,13 @@ export interface Hello {
   role: Role; client: string; user_agent: string;
 }
 
+export type FlightCommand = "takeoff" | "land";
+
+export interface Command {
+  type: "command"; v: 1; seq: number; t_ms: number;
+  name: FlightCommand; args: { drones: string[] };
+}
+
 export interface Rect { x_min: number; x_max: number; y_min: number; y_max: number }
 
 export interface HostConfig {

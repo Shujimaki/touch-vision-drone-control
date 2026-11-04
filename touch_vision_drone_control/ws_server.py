@@ -11,13 +11,14 @@ from typing import Any, assert_never
 from aiohttp import WSCloseCode, WSMsgType, web
 from pydantic import ValidationError
 
-from touch_vision_drone_control.drone_connection import DroneConnection, DroneReport, Position
+from touch_vision_drone_control.drone_connection import DroneConnection, DroneReport, FlightState, Position
 from touch_vision_drone_control.messages import (
     TABLET_MESSAGE,
     Ack,
     Altitude,
     Command,
     DefensiveHover,
+    DronesArgs,
     DroneTelemetry,
     Event,
     Hello,
@@ -162,11 +163,13 @@ class _Connection:
                 await self._reject(ref, "invalid", "hello was already received")
             case Hello():
                 await self._welcome(message, ref)
-            case Command():
-                await self._reject(ref, "not_allowed", f"{message.name} is not supported yet")
-            case Input() | Event() if not self._app[OPERATOR].held_by(self):
+            case Input() | Event() | Command(name="takeoff" | "land") if not self._app[OPERATOR].held_by(self):
                 detail = f"only the operator sends {message.type}"
                 await self._reject(ref, "not_allowed", detail, input_stream=isinstance(message, Input))
+            case Command(name="takeoff" | "land"):
+                await self._takeoff_or_land(message, ref)
+            case Command():
+                await self._reject(ref, "not_allowed", f"{message.name} is not supported yet")
             case Input():
                 if self._last_input_t_ms is not None and message.t_ms < self._last_input_t_ms:
                     detail = "input t_ms is earlier than the previous input"
@@ -178,6 +181,24 @@ class _Connection:
                 pass
             case _:
                 assert_never(message)
+
+    async def _takeoff_or_land(self, command: Command, ref: int) -> None:
+        try:
+            names = DronesArgs.model_validate(command.args).drones
+        except ValidationError as error:
+            await self._reject(ref, "invalid", f"args.{_first_error(error)}")
+            return
+        unknown = [name for name in names if name not in self._app[CONFIG].drones]
+        if unknown:
+            await self._reject(ref, "unknown_drone", ", ".join(unknown))
+            return
+        drones = self._app[DRONES]
+        start = drones.takeoff if command.name == "takeoff" else drones.land
+        refused = [f"{name}: {reply.reason}" for name, reply in start(names).items() if not reply.ok]
+        if refused:
+            await self._reject(ref, "not_allowed", "; ".join(refused))
+            return
+        await self._send(Reply(seq=self._next_seq(), host_ms=self._host_ms(), ref=ref, ok=True, code=None, detail=None))
 
     async def _welcome(self, hello: Hello, ref: int) -> None:
         if hello.role == "operator" and not self._app[OPERATOR].claim(self):
@@ -219,7 +240,9 @@ class _Connection:
             return None
         targets = self._app[TARGETS]
         for report in reports:
-            if all(math.isfinite(v) for v in (report.position.x, report.position.y, report.position.z)):
+            if report.state is not FlightState.FLYING:
+                targets.pop(report.drone, None)
+            elif all(math.isfinite(v) for v in (report.position.x, report.position.y, report.position.z)):
                 targets.setdefault(report.drone, report.position)
         try:
             text = encode(_telemetry(self._next_seq(), self._app[CLOCK](), self._ack, reports, targets))
