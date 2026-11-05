@@ -5,6 +5,7 @@ import logging
 import time
 import weakref
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any, assert_never
 
 from aiohttp import WSCloseCode, WSMsgType, web
@@ -74,6 +75,7 @@ def create_app(
     drones: DroneConnection,
     session: str,
     clock: Callable[[], float] = time.monotonic,
+    web_app_dir: Path | None = None,
 ) -> web.Application:
     """Build the bridge's web application. `clock` is the host monotonic clock, in seconds, shared with `drones`."""
     app = web.Application()
@@ -85,9 +87,19 @@ def create_app(
     app[OPERATOR] = _OperatorSlot()
     app[SOCKETS] = weakref.WeakSet()
     app.router.add_get("/ws", _handle_socket)
+    if web_app_dir is not None:
+        app.router.add_get("/", _serve_index(web_app_dir / "index.html"))
+        app.router.add_static("/", web_app_dir)
     app.on_shutdown.append(_close_sockets)
     app.cleanup_ctx.append(_stream_setpoints)
     return app
+
+
+def _serve_index(index: Path):
+    async def serve(_: web.Request) -> web.FileResponse:
+        return web.FileResponse(index)
+
+    return serve
 
 
 async def _stream_setpoints(app: web.Application):
