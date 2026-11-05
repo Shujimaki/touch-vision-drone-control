@@ -5,7 +5,7 @@ The application combines touch positioning, hand gestures for altitude control, 
 
 ## Current status
 
-The project is in development. The tablet web app is a mockup that connects to the Python command bridge and shows the connection state. It draws each drone entity at its measured position from telemetry. The bridge answers `hello` with `welcome`, checks the connection rules of [message format v1](protocol/README.md), and sends `telemetry` from the mock drone connection at 30 Hz. The tablet's Take off and Land buttons send `command`, and the bridge takes off or lands the mock drones and answers with `reply`. The tablet shows each drone's flight state from telemetry. The drone connection and its mock have a contract test suite. One finger can hold a flying drone and drag it. The tablet sends `input` at 30 Hz with the target that passed the restricted-zone check. The bridge streams setpoints to every flying mock drone at 20 Hz or more, with or without input. The altitude channel is a stub that always reports `idle`.
+The project is in development. The tablet web app is a mockup that connects to the Python command bridge and shows the connection state. It draws each drone entity at its measured position from telemetry. The bridge answers `hello` with `welcome`, checks the connection rules of [message format v1](protocol/README.md), and sends `telemetry` from the mock drone connection at 30 Hz. The tablet's Take off and Land buttons send `command`, and the bridge takes off or lands the mock drones and answers with `reply`. The tablet shows each drone's flight state from telemetry. The drone connection and its mock have a contract test suite. One finger can hold a flying drone and drag it. The tablet sends `input` at 30 Hz with the target that passed the restricted-zone check. The bridge streams setpoints to every flying mock drone at 20 Hz or more, with or without input. The altitude channel is a stub that always reports `idle`. The bridge can serve the built tablet web app and `/ws` from one HTTPS origin for the tablet. That path has not been tested on the Tab S9 yet.
 The repository contains no hardware compatibility or flight-performance test results.
 
 This README describes the planned software architecture, setup needs, dependencies, development steps, and tests.
@@ -61,7 +61,24 @@ mkcert -install
 mkdir -p .local/certs && mkcert -cert-file .local/certs/dev.pem -key-file .local/certs/dev-key.pem localhost 127.0.0.1 <laptop-ip>
 ```
 
-Replace `<laptop-ip>` with the laptop's address on the team's router. Installing the mkcert root certificate on the Galaxy Tab S9 is not documented or tested yet.
+Replace `<laptop-ip>` with the laptop's address on the team's router.
+
+### Run on the tablet without internet
+
+In the lab the tablet joins the team's router, which has no internet. The bridge then serves the built tablet web app and `/ws` from one HTTPS origin, so the flight host runs one server and no Vite ([ADR 0005](docs/adr/0005-bridge-serves-the-tablet-web-app.md)). An origin is the scheme, address, and port of a URL, such as `https://192.168.1.10:8765`. `web/test/build.test.ts` builds the tablet web app and fails if a built file names an address on another origin or references an asset that the build does not contain.
+
+1. Build the tablet web app. From `web/`, run `npm run build`. It writes `web/dist/`.
+2. Make the certificate as the commands above show, with the flight host's address in place of `<laptop-ip>`.
+3. Install the mkcert root certificate on the Galaxy Tab S9. `mkcert -CAROOT` prints the folder that holds it. Copy only `rootCA.pem` to the tablet. Never copy `rootCA-key.pem`, because anyone with that file can make certificates the tablet trusts. [[18]](https://github.com/FiloSottile/mkcert) On the tablet, search Settings for "CA certificate", choose it, and pick the copied file. This menu path and whether Chrome trusts a CA that the user installed are not tested on the Tab S9 yet.
+4. On the flight host, from the repository root, start the bridge on every network address with the tablet web app and the certificate:
+
+```bash
+uv run python -m touch_vision_drone_control.backend_server --host 0.0.0.0 --web-app web/dist --cert .local/certs/dev.pem --key .local/certs/dev-key.pem
+```
+
+5. On the tablet, open `https://<flight-host-ip>:8765/` in Chrome. Record the Chrome version from `chrome://version` with the test result.
+
+Without `--cert` and `--key`, the bridge serves plain HTTP, which is how Vite's dev server reaches it.
 
 ### Planned environments
 
@@ -184,7 +201,7 @@ Identify the equipment in each calibration record. Setup commands will follow ap
 
 ## Testing
 
-Only the drone connection and the bridge's WebSocket server have tests so far (see below). The implementation needs three levels of checks:
+Only the drone connection, the bridge's WebSocket server, and the bridge's page serving have tests so far (see below). The implementation needs three levels of checks:
 
 - Use the mock connection to check command fields, limits, input state, and trial records against the [control requirements](CONTEXT.md#required-interactions-and-control-behavior).
 - Use the physical tablet to check camera access, three touch contacts, gestures, and video together.
@@ -196,7 +213,7 @@ The Python command bridge has its tests in `test/`. They need no ROS 2 install. 
 uv run pytest
 ```
 
-`test/test_ws_server.py` opens a real WebSocket to `/ws` through pytest-aiohttp and builds its messages from the [example messages](protocol/examples/).
+`test/test_tablet_web_app.py` checks that the bridge serves the built tablet web app beside `/ws`. `test/test_ws_server.py` opens a real WebSocket to `/ws` through pytest-aiohttp and builds its messages from the [example messages](protocol/examples/).
 
 `test/test_drone_connection_contract.py` is the contract suite for drone connections. It runs against the mock drone connection now. The hardware team adds a harness for the Crazyswarm2 drone connection to its `HARNESSES` list, and the same tests then run against the real swarm.
 
@@ -239,7 +256,7 @@ Moving branches and package pages support research claims. Record fixed revision
 15. [Node.js 24.21.0 LTS, 2026-09-08](https://nodejs.org/en/blog/release/v24.21.0).
 16. [MDN getUserMedia secure-context requirements, undated](http://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia).
 17. [mkcert 1.4.4 release, 2022-04-26, checked 2026-09-23](https://github.com/FiloSottile/mkcert/releases).
-18. [mkcert mobile trust instructions, undated](https://github.com/FiloSottile/mkcert).
+18. [mkcert mobile trust instructions, undated, checked 2026-11-05](https://github.com/FiloSottile/mkcert).
 19. [uv 0.12.18 on PyPI, 2026-09-22](https://pypi.org/project/uv/).
 20. [uv project files and lockfile, undated](https://docs.astral.sh/uv/concepts/projects/layout/).
 21. [Pydantic 2.13.5 release metadata, 2026-08-28](https://pypi.org/pypi/pydantic/json).

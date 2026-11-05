@@ -40,9 +40,9 @@ npm ci
 npm run dev
 ```
 
-Open the address that Vite prints. `npm run build` writes a static copy to `dist/`, and `npm test` checks the components, the connection module, and that the page and the script stay in step.
+Open the address that Vite prints. `npm run build` writes a static copy to `dist/`, and `npm test` checks the components, the connection module, that the page and the script stay in step, and that the build names no address on another origin.
 
-The page connects to the Python command bridge on `/ws` through `src/connection.ts`. The badge on the map reads "Connecting" on the first attempt and "Connected" once the bridge answers. After a failure it reads "Connection failed" with the cause (bridge lost, no bridge, operator busy, version mismatch, or rejected) and whether the page retries. It retries every second, except after a version mismatch or a rejected `hello`. The map draws no drone entities until the first telemetry and dims them while their data is old. The online copy has no bridge, so it always shows "No bridge, retrying". The [root README](../README.md#run-the-bridge-and-the-tablet-web-app) explains how to start the bridge and serve the page over HTTPS.
+The page connects to the Python command bridge on `/ws` through `src/connection.ts`. The badge on the map reads "Connecting" on the first attempt and "Connected" once the bridge answers. After a failure it reads "Connection failed" with the cause (bridge lost, no bridge, operator busy, version mismatch, or rejected) and whether the page retries. It retries every second, except after a version mismatch or a rejected `hello`. The map draws no drone entities until the first telemetry and dims them while their data is old. The online copy has no bridge, so it always shows "No bridge, retrying". The [root README](../README.md#run-the-bridge-and-the-tablet-web-app) explains how to start the bridge and serve the page over HTTPS, and [how the bridge serves the built tablet web app](../README.md#run-on-the-tablet-without-internet).
 
 ## Online copy
 
