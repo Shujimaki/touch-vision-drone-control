@@ -21,7 +21,6 @@ on ROS 2.
   frame, and ROS topic.
 - Measure whether the stream stays fresh and stable during a lab run.
 
-The issue notes one test where the bridge received no usable NatNet frames.
 We still need to confirm the exact setup when the OptiTrack system is available.
 
 ## Consequences
