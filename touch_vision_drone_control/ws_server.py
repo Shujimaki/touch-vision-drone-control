@@ -2,10 +2,10 @@ import asyncio
 import contextlib
 import json
 import logging
-import math
 import time
 import weakref
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any, assert_never
 
 from aiohttp import WSCloseCode, WSMsgType, web
@@ -17,7 +17,9 @@ from touch_vision_drone_control.messages import (
     Ack,
     Altitude,
     Command,
+    Course,
     DefensiveHover,
+    DronesArgs,
     DroneTelemetry,
     Event,
     Hello,
@@ -32,11 +34,13 @@ from touch_vision_drone_control.messages import (
     Welcome,
     encode,
 )
+from touch_vision_drone_control.setpoint_stream import SETPOINT_HZ, SetpointStream
 
 _log = logging.getLogger(__name__)
 
 _INPUT_REPLY_INTERVAL_S = 1.0
 _HEARTBEAT_S = 2.0
+_ROUNDING_STEP_M = 0.001
 
 
 class _OperatorSlot:
@@ -59,7 +63,7 @@ class _OperatorSlot:
 
 CONFIG = web.AppKey("config", HostConfig)
 DRONES = web.AppKey("drones", DroneConnection)
-TARGETS = web.AppKey("targets", dict[str, Position])
+SETPOINTS = web.AppKey("setpoints", SetpointStream)
 CLOCK = web.AppKey("clock", Callable[[], float])
 SESSION = web.AppKey("session", str)
 OPERATOR = web.AppKey("operator", _OperatorSlot)
@@ -71,19 +75,54 @@ def create_app(
     drones: DroneConnection,
     session: str,
     clock: Callable[[], float] = time.monotonic,
+    web_app_dir: Path | None = None,
 ) -> web.Application:
     """Build the bridge's web application. `clock` is the host monotonic clock, in seconds, shared with `drones`."""
     app = web.Application()
     app[CONFIG] = config
     app[DRONES] = drones
-    app[TARGETS] = {}
+    app[SETPOINTS] = SetpointStream(drones, clock, config.input_timeout_ms / 1000)
     app[CLOCK] = clock
     app[SESSION] = session
     app[OPERATOR] = _OperatorSlot()
     app[SOCKETS] = weakref.WeakSet()
     app.router.add_get("/ws", _handle_socket)
+    if web_app_dir is not None:
+        app.router.add_get("/", _serve_index(web_app_dir / "index.html"))
+        app.router.add_static("/", web_app_dir)
     app.on_shutdown.append(_close_sockets)
+    app.cleanup_ctx.append(_stream_setpoints)
     return app
+
+
+def _serve_index(index: Path):
+    async def serve(_: web.Request) -> web.FileResponse:
+        return web.FileResponse(index)
+
+    return serve
+
+
+async def _stream_setpoints(app: web.Application):
+    task = asyncio.create_task(_run_setpoints(app[SETPOINTS]))
+    yield
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+
+async def _run_setpoints(setpoints: SetpointStream) -> None:
+    loop = asyncio.get_running_loop()
+    next_tick, logged = loop.time(), False
+    while True:
+        try:
+            setpoints.tick()
+            logged = False
+        except Exception:
+            if not logged:
+                _log.exception("skipping setpoint ticks")
+            logged = True
+        next_tick += 1 / SETPOINT_HZ
+        await asyncio.sleep(max(0.0, next_tick - loop.time()))
 
 
 async def _close_sockets(app: web.Application) -> None:
@@ -110,7 +149,9 @@ async def _handle_socket(request: web.Request) -> web.WebSocketResponse:
         telemetry.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await telemetry
-        request.app[OPERATOR].release(connection)
+        if request.app[OPERATOR].held_by(connection):
+            request.app[SETPOINTS].release_and_lock()
+            request.app[OPERATOR].release(connection)
     return ws
 
 
@@ -162,22 +203,64 @@ class _Connection:
                 await self._reject(ref, "invalid", "hello was already received")
             case Hello():
                 await self._welcome(message, ref)
-            case Command():
-                await self._reject(ref, "not_allowed", f"{message.name} is not supported yet")
             case Input() | Event() if not self._app[OPERATOR].held_by(self):
                 detail = f"only the operator sends {message.type}"
                 await self._reject(ref, "not_allowed", detail, input_stream=isinstance(message, Input))
+            case Command(name="takeoff" | "land"):
+                await self._takeoff_or_land(message, ref)
+            case Command():
+                await self._reject(ref, "not_allowed", f"{message.name} is not supported yet")
             case Input():
                 if self._last_input_t_ms is not None and message.t_ms < self._last_input_t_ms:
                     detail = "input t_ms is earlier than the previous input"
                     await self._reject(ref, "invalid", detail, input_stream=True)
                 else:
-                    self._last_input_t_ms = message.t_ms
-                    self._ack = Ack(seq=message.seq, t_ms=message.t_ms, host_rx_ms=self._host_ms())
+                    await self._take_input(message, ref)
             case Event():
                 pass
             case _:
                 assert_never(message)
+
+    async def _take_input(self, message: Input, ref: int) -> None:
+        config = self._app[CONFIG]
+        names = [held.id for held in message.held]
+        unknown = [name for name in names if name not in config.drones]
+        if unknown:
+            await self._reject(ref, "unknown_drone", ", ".join(unknown), input_stream=True)
+            return
+        if len(set(names)) != len(names):
+            await self._reject(ref, "invalid", "a held drone repeats", input_stream=True)
+            return
+        gesture = message.gesture
+        if (gesture.state != "active" and gesture.rate != 0) or abs(gesture.rate) > config.rate_max:
+            await self._reject(ref, "invalid", "gesture.rate is outside what the gesture state allows", input_stream=True)
+            return
+        self._last_input_t_ms = message.t_ms
+        self._ack = Ack(seq=message.seq, t_ms=message.t_ms, host_rx_ms=self._host_ms())
+        accepted = {h.id: (h.x, h.y) for h in message.held if _in_allowed_area(h.x, h.y, config.course)}
+        ignored = set(names) - accepted.keys()
+        self._app[SETPOINTS].apply_input(accepted, ignored, gesture.state)
+        if ignored:
+            detail = f"held target outside the capture volume or inside the restricted zone: {', '.join(sorted(ignored))}"
+            await self._reject(ref, "invalid", detail, input_stream=True)
+
+    async def _takeoff_or_land(self, command: Command, ref: int) -> None:
+        try:
+            names = DronesArgs.model_validate(command.args).drones
+        except ValidationError as error:
+            await self._reject(ref, "invalid", f"args.{_first_error(error)}")
+            return
+        unknown = [name for name in names if name not in self._app[CONFIG].drones]
+        if unknown:
+            await self._reject(ref, "unknown_drone", ", ".join(unknown))
+            return
+        drones = self._app[DRONES]
+        start = drones.takeoff if command.name == "takeoff" else drones.land
+        refused = [f"{name}: {reply.reason}" for name, reply in start(names).items() if not reply.ok]
+        if refused:
+            await self._reject(ref, "not_allowed", "; ".join(refused))
+            return
+        await self._send(Reply(seq=self._next_seq(), host_ms=self._host_ms(), ref=ref, ok=True, code=None, detail=None))
 
     async def _welcome(self, hello: Hello, ref: int) -> None:
         if hello.role == "operator" and not self._app[OPERATOR].claim(self):
@@ -217,12 +300,13 @@ class _Connection:
         except Exception:
             self._note_failure("the drone connection failed to report")
             return None
-        targets = self._app[TARGETS]
-        for report in reports:
-            if all(math.isfinite(v) for v in (report.position.x, report.position.y, report.position.z)):
-                targets.setdefault(report.drone, report.position)
+        setpoints = self._app[SETPOINTS]
         try:
-            text = encode(_telemetry(self._next_seq(), self._app[CLOCK](), self._ack, reports, targets))
+            text = encode(
+                _telemetry(
+                    self._next_seq(), self._app[CLOCK](), self._ack, reports, setpoints.targets(), setpoints.held()
+                )
+            )
         except ValueError:
             self._note_failure("a drone report does not fit message format v1")
             return None
@@ -274,7 +358,14 @@ class _Connection:
         return round(self._app[CLOCK]() * 1000, 1)
 
 
-def _telemetry(seq: int, now_s: float, ack: Ack, reports: list[DroneReport], targets: dict[str, Position]) -> Telemetry:
+def _telemetry(
+    seq: int,
+    now_s: float,
+    ack: Ack,
+    reports: list[DroneReport],
+    targets: Mapping[str, Position],
+    held: frozenset[str],
+) -> Telemetry:
     return Telemetry(
         seq=seq,
         host_ms=round(now_s * 1000, 1),
@@ -282,15 +373,15 @@ def _telemetry(seq: int, now_s: float, ack: Ack, reports: list[DroneReport], tar
         mode="course",
         trial=None,
         altitude=Altitude(rate=0.0, blocked_by=None, reason=None),
-        drones=[_drone_telemetry(r, targets.get(r.drone, r.position), now_s) for r in reports],
+        drones=[_drone_telemetry(r, targets.get(r.drone, r.position), r.drone in held, now_s) for r in reports],
     )
 
 
-def _drone_telemetry(report: DroneReport, target: Position, now_s: float) -> DroneTelemetry:
+def _drone_telemetry(report: DroneReport, target: Position, held: bool, now_s: float) -> DroneTelemetry:
     position, ranges, hover = report.position, report.ranges, report.defensive_hover
     return DroneTelemetry(
         id=report.drone,
-        held=False,
+        held=held,
         state=report.state.value,
         link=report.link.value,
         x=_v1_length(position.x),
@@ -303,6 +394,13 @@ def _drone_telemetry(report: DroneReport, target: Position, now_s: float) -> Dro
         defensive_hover=None if hover is None else DefensiveHover(dir=hover.direction, range=_v1_length(hover.range_m)),
         battery_v=report.battery_v,
     )
+
+
+def _in_allowed_area(x: float, y: float, course: Course) -> bool:
+    volume, zone, tol = course.capture_volume, course.restricted_zone, _ROUNDING_STEP_M
+    in_volume = volume.x_min - tol <= x <= volume.x_max + tol and volume.y_min - tol <= y <= volume.y_max + tol
+    in_zone = zone.x_min + tol < x < zone.x_max - tol and zone.y_min + tol < y < zone.y_max - tol
+    return in_volume and not in_zone
 
 
 def _v1_length(meters: float) -> float:

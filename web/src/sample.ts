@@ -1,5 +1,6 @@
 // Fixed sample data for the mockup: the course, three drones in one moment of a trial, and the event log so far.
 // Nothing here changes over time. The UI only moves what the operator drags and shows what the operator selects.
+import type { FlightState } from "./protocol";
 
 export type Dir = "front" | "back" | "left" | "right" | "up";
 export type LogKind = "info" | "ok" | "warn" | "crit";
@@ -17,6 +18,7 @@ export interface Course {
 export interface Health { motorPass: boolean[]; sag: number; at: number }
 export interface Drone {
   id: string; n: number;
+  state: FlightState;
   x: number; y: number; z: number; yaw: number;
   tx: number; ty: number;                         // where the drone is heading (the operator's last target)
   vbat: number; link: number;                     // volts; radio link quality in %
@@ -50,13 +52,13 @@ export const COURSE: Course = {
 
 // The moment shown: DRONE 1 is held and climbing next to O1, DRONE 2 flies toward a target, DRONE 3 is on its pad.
 export const sampleDrones = (): Drone[] => [
-  { id: "cf1", n: 1, x: 0.855, y: 1.56, z: 0.82, yaw: 0, tx: 0.855, ty: 1.56, vbat: 4.02, link: 98, held: true,
+  { id: "cf1", n: 1, state: "flying", x: 0.855, y: 1.56, z: 0.82, yaw: 0, tx: 0.855, ty: 1.56, vbat: 4.02, link: 98, held: true,
     ranges: { front: 1.99, back: 1.56, left: 0.855, right: 0.19, up: 1.73 }, below: { dist: 0.82, what: "floor" },
     health: { motorPass: [true, true, true, true], sag: 0.32, at: 791 } },
-  { id: "cf2", n: 2, x: 1.95, y: 0.95, z: 0.90, yaw: 350, tx: 1.62, ty: 1.02, vbat: 3.98, link: 97, held: false,
+  { id: "cf2", n: 2, state: "flying", x: 1.95, y: 0.95, z: 0.90, yaw: 350, tx: 1.62, ty: 1.02, vbat: 3.98, link: 97, held: false,
     ranges: { front: 0.94, back: 0.96, left: 1.98, right: 2.12, up: 1.65 }, below: { dist: 0.90, what: "floor" },
     health: { motorPass: [true, true, true, true], sag: 0.36, at: 791 } },
-  { id: "cf3", n: 3, x: 2.95, y: 0.45, z: 0, yaw: 95, tx: 2.95, ty: 0.45, vbat: 3.94, link: 96, held: false,
+  { id: "cf3", n: 3, state: "grounded", x: 2.95, y: 0.45, z: 0, yaw: 95, tx: 2.95, ty: 0.45, vbat: 3.94, link: 96, held: false,
     ranges: {}, below: null,
     health: { motorPass: [true, true, true, true], sag: 0.39, at: 791 } },
 ];

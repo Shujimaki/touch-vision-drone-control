@@ -31,8 +31,11 @@ class Held(_Strict):
     follow: bool
 
 
+GestureState = Literal["idle", "confirming", "active", "locked", "hand_loss", "unrecognized"]
+
+
 class Gesture(_Strict):
-    state: Literal["idle", "confirming", "active", "locked", "hand_loss", "unrecognized"]
+    state: GestureState
     rate: float
     neutral_y: Fraction | None
 
@@ -82,6 +85,16 @@ class Command(_Strict):
     t_ms: float
     name: Literal["takeoff", "land", "stop", "stop_reset", "set_mode", "trial_start", "trial_end"]
     args: dict[str, Any]
+
+
+class DronesArgs(_Strict):
+    drones: Annotated[list[str], Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def _distinct(self) -> "DronesArgs":
+        if len(set(self.drones)) != len(self.drones):
+            raise ValueError("a drone name repeats")
+        return self
 
 
 TabletMessage = Annotated[Hello | Input | Event | Command, Field(discriminator="type")]

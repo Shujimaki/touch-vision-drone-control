@@ -17,8 +17,7 @@ export function dronesTable(drones: Drone[], trig: number, show: number): string
   let h = `<thead><tr><th rowspan="2">Drone</th><th rowspan="2">state</th><th rowspan="2">defensive_hover</th><th colspan="2" class="grp">Radio</th><th colspan="2" class="grp">Battery</th><th colspan="4" class="grp">Pose, motion capture (m, °)</th><th colspan="3" class="grp">cmd (m)</th><th colspan="5" class="grp">ranges, Multi-ranger (m)</th><th rowspan="2">Below (m)<br><span style="font-weight:400">computed</span></th><th rowspan="2">held</th></tr>
     <tr><th>link</th><th>quality</th><th>pm.vbat</th><th>level</th><th>x</th><th>y</th><th>z</th><th>yaw</th><th>x</th><th>y</th><th>z</th>${RANGE_COLS.map(k => `<th>${k}</th>`).join("")}</tr></thead><tbody>`;
   for (const d of drones) {
-    const st = d.z > 0.02 ? "flying" : "grounded";
-    h += `<tr><td><b>${U(d.id)}</b></td><td class="${st === "flying" ? "ok" : "dim"}">${st}</td><td class="dim">null</td>
+    h += `<tr><td><b>${U(d.id)}</b></td><td class="${d.state === "flying" ? "ok" : d.state === "grounded" ? "dim" : "own"}">${d.state}</td><td class="dim">null</td>
       <td class="ok">ok</td><td class="${d.link < 70 ? "warn" : ""}">${d.link}%</td>
       <td class="${d.vbat < 3.2 ? "warn" : ""}">${d.vbat.toFixed(2)} V</td><td>${batteryLevel(d.vbat)}%</td>
       <td>${d.x.toFixed(2)}</td><td>${d.y.toFixed(2)}</td><td>${d.z.toFixed(2)}</td><td>${Math.round(((d.yaw + 180) % 360 + 360) % 360 - 180)}</td>
