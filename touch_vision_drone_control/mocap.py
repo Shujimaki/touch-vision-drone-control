@@ -17,11 +17,11 @@ class PoseSource(Protocol):
 # describes what a pose source (like mocap) should provide
 
 def motive_to_map(
-    x_mm: float, y_mm: float, z_mm: float
+    x: float, y: float, z: float
 ) -> tuple[float, float, float]:
     # converts Motive coordinates to map position in meters
-    x = x_mm / 1000    # millimeters to meters
-    height = y_mm / 1000   # Motive's y is height
-    y = -z_mm / 1000 # Motive's z points the other way on the map
+    map_x = x  # Motive x is already in meters
+    height = y  # Motive's y is height
+    map_y = -z  # Motive's z points the other way on the map
 
-    return x, y, height  # map frame: x, y on the floor, z = height
+    return map_x, map_y, height  # map frame: x, y on the floor, z = height
