@@ -32,6 +32,10 @@ _Avoid_: Mocap server, tracking host
 
 ## Map
 
+**Map frame**:
+The frame for drone positions in the Python command bridge and on the tablet map: x and y on the floor, z up, in meters. Motion capture positions are converted into it. Its origin and rotation relative to the lab are not measured yet.
+_Avoid_: Motion capture frame (for converted positions)
+
 **Target marker**:
 The map symbol for where a drone is heading: the target the Python command bridge holds for it. It differs from the [drone entity](CONTEXT.md#shared-glossary), which shows the measured position.
 _Avoid_: Ghost, cursor, setpoint marker
