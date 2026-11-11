@@ -25,3 +25,14 @@ def motive_to_map(
     map_y = -z  # Motive's z points the other way on the map
 
     return map_x, map_y, height  # map frame: x, y on the floor, z = height
+
+
+def tracked_pose_from_motive(
+    x: float, y: float, z: float, measured_at: float
+) -> TrackedPose:
+    map_x, map_y, map_z = motive_to_map(x, y, z)
+
+    return TrackedPose(
+        position=Position(x=map_x, y=map_y, z=map_z),
+        measured_at=measured_at,
+    )
