@@ -4,7 +4,13 @@ import pytest
 
 from fake_clock import FakeClock
 
-from touch_vision_drone_control.backend_server import CRAZYSWARM2_MODULE, StartupError, build_bridge, option_parser
+from touch_vision_drone_control.backend_server import (
+    CRAZYSWARM2_MODULE,
+    StartupError,
+    build_bridge,
+    open_message_log,
+    option_parser,
+)
 from touch_vision_drone_control.drone_connection import FlightState, Position
 from touch_vision_drone_control.host_config import PLACEHOLDER_CONFIG
 from touch_vision_drone_control.messages import Rect
@@ -51,3 +57,18 @@ def test_crazyswarm2_without_its_module_stops_the_bridge_with_a_clear_error(monk
 
     with pytest.raises(StartupError, match="the Crazyswarm2 drone connection is not available"):
         build_bridge("crazyswarm2", "takeoff", FakeClock())
+
+
+def test_without_the_log_option_the_bridge_has_no_message_log() -> None:
+    with open_message_log(option_parser().parse_args([]).log) as log:
+        assert log is None
+
+
+def test_the_log_option_appends_to_an_existing_message_log(tmp_path) -> None:
+    path = tmp_path / "flight.jsonl"
+    path.write_text('{"earlier": true}\n')
+
+    with open_message_log(option_parser().parse_args(["--log", str(path)]).log) as log:
+        log.write('{"later": true}\n')
+
+    assert path.read_text() == '{"earlier": true}\n{"later": true}\n'

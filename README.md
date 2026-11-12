@@ -49,10 +49,13 @@ The bridge needs [uv](https://docs.astral.sh/uv/). `pyproject.toml` and `uv.lock
 uv run python -m touch_vision_drone_control.backend_server
 ```
 
-It listens on `127.0.0.1:8765`. Two options choose what the bridge drives:
+It listens on `127.0.0.1:8765`. Two options choose what the bridge drives, and a third turns on the message log:
 
 - `--drones mock|crazyswarm2` picks the drone connection. The default is `mock`. The Crazyswarm2 drone connection does not exist yet, so `crazyswarm2` stops the bridge with an error.
 - `--config course|takeoff` picks the host configuration. The default is `course`, the placeholder course. `takeoff` is one drone, cf1, in a 1 m by 1 m box around its takeoff spot ([ADR 0007](docs/adr/0007-fly-one-drone-without-motive.md)). Fly it from the flight test page at `/flight-test.html`, as [web/README.md](web/README.md#flight-test-page) describes.
+- `--log PATH` appends the message log to `PATH`, such as `data/runs/flight.jsonl`, which Git ignores. Without it, the bridge writes no log.
+
+Each line of the message log is one JSON object with `kind`, `host_ms`, `session`, and `config`. `host_ms` is the host monotonic time, as in message format v1, and `config` is the host configuration ID. A line with `kind` `input` holds each received `input` in `message`, as received, including inputs the bridge then rejects. A line with `kind` `target` holds `drone`, the `target` position in meters, and `ok`, which says whether the drone connection accepted it. The target lines show the position-command rate for [TARGET-01](CONTEXT.md#evaluation-method-and-numerical-targets).
 
 In a second terminal, start the tablet web app as [web/README.md](web/README.md#run-it) describes. Vite forwards `/ws` to the bridge, so the page and the socket share one origin.
 

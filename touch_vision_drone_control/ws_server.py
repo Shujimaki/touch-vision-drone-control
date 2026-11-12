@@ -6,12 +6,12 @@ import time
 import weakref
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, assert_never
+from typing import Any, TextIO, assert_never
 
 from aiohttp import WSCloseCode, WSMsgType, web
 from pydantic import ValidationError
 
-from touch_vision_drone_control.drone_connection import DroneConnection, DroneReport, Position
+from touch_vision_drone_control.drone_connection import DroneConnection, DroneReport, Position, Reply as DroneReply
 from touch_vision_drone_control.messages import (
     TABLET_MESSAGE,
     Ack,
@@ -71,18 +71,51 @@ OPERATOR = web.AppKey("operator", _OperatorSlot)
 SOCKETS = web.AppKey("sockets", weakref.WeakSet)
 
 
+class _MessageLog:
+    def __init__(self, out: TextIO, clock: Callable[[], float], session: str, config_id: str) -> None:
+        self._out = out
+        self._clock = clock
+        self._session = session
+        self._config_id = config_id
+        self._failed = False
+
+    def input(self, raw: Mapping[str, object]) -> None:
+        self._write("input", message=raw)
+
+    def target(self, drone: str, target: Position, reply: DroneReply) -> None:
+        self._write("target", drone=drone, target={"x": target.x, "y": target.y, "z": target.z}, ok=reply.ok)
+
+    def _write(self, kind: str, **fields: object) -> None:
+        line = {"kind": kind, "host_ms": _ms(self._clock()), "session": self._session, "config": self._config_id}
+        try:
+            self._out.write(json.dumps(line | fields) + "\n")
+        except OSError:
+            if not self._failed:
+                _log.exception("skipping message log lines")
+            self._failed = True
+
+
+MESSAGE_LOG = web.AppKey("message_log", _MessageLog)
+
+
 def create_app(
     config: HostConfig,
     drones: DroneConnection,
     session: str,
     clock: Callable[[], float] = time.monotonic,
     web_app_dir: Path | None = None,
+    log: TextIO | None = None,
 ) -> web.Application:
     """Build the bridge's web application. `clock` is the host monotonic clock, in seconds, shared with `drones`."""
     app = web.Application()
+    message_log = None if log is None else _MessageLog(log, clock, session, config.id)
     app[CONFIG] = config
     app[DRONES] = drones
-    app[SETPOINTS] = SetpointStream(drones, clock, config.input_timeout_ms / 1000)
+    if message_log is not None:
+        app[MESSAGE_LOG] = message_log
+    app[SETPOINTS] = SetpointStream(
+        drones, clock, config.input_timeout_ms / 1000, on_target=None if message_log is None else message_log.target
+    )
     app[CLOCK] = clock
     app[SESSION] = session
     app[OPERATOR] = _OperatorSlot()
@@ -172,6 +205,9 @@ class _Connection:
     async def receive(self, text: str) -> None:
         raw = _json_object(text)
         ref = _seq_of(raw)
+        message_log = self._app.get(MESSAGE_LOG)
+        if message_log is not None and raw is not None and raw.get("type") == "input":
+            message_log.input(raw)
         if raw is None:
             await self._reject_or_close(ref, "not a JSON object")
             return
@@ -374,7 +410,7 @@ class _Connection:
         return self._seq
 
     def _host_ms(self) -> float:
-        return round(self._app[CLOCK]() * 1000, 1)
+        return _ms(self._app[CLOCK]())
 
 
 def _telemetry(
@@ -387,7 +423,7 @@ def _telemetry(
 ) -> Telemetry:
     return Telemetry(
         seq=seq,
-        host_ms=round(now_s * 1000, 1),
+        host_ms=_ms(now_s),
         ack=ack,
         mode="course",
         trial=None,
@@ -420,6 +456,10 @@ def _in_allowed_area(x: float, y: float, course: Course) -> bool:
     in_volume = volume.x_min - tol <= x <= volume.x_max + tol and volume.y_min - tol <= y <= volume.y_max + tol
     in_zone = zone.x_min + tol < x < zone.x_max - tol and zone.y_min + tol < y < zone.y_max - tol
     return in_volume and not in_zone
+
+
+def _ms(seconds: float) -> float:
+    return round(seconds * 1000, 1)
 
 
 def _v1_length(meters: float) -> float:
