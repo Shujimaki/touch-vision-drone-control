@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import math
 import time
@@ -1023,3 +1024,91 @@ async def test_with_the_takeoff_configuration_a_held_target_outside_the_box_is_i
 
     assert (reply["ref"], reply["code"]) == (5, "invalid")
     assert (drone["held"], drone["cmd"]) == (True, {"x": 0.2, "y": -0.3, "z": 0.5})
+
+
+async def open_logged(aiohttp_client, clock, drones=None):
+    log = io.StringIO()
+    if drones is None:
+        drones = MockDroneConnection(TEST_CONFIG.drones, clock=clock, start={"cf7": Position(1.5, 2.0, 0.0)})
+    client = await aiohttp_client(create_app(TEST_CONFIG, drones, session="s-test", clock=clock, log=log))
+    ws = await client.ws_connect("/ws", timeout=ClientWSTimeout(ws_receive=2))
+    await say_hello(ws)
+    return ws, log
+
+
+def log_lines(log: io.StringIO, kind: str) -> list[dict]:
+    return [line for line in map(json.loads, log.getvalue().splitlines()) if line["kind"] == kind]
+
+
+async def test_the_log_holds_each_received_input_as_received(aiohttp_client, clock) -> None:
+    ws, log = await open_logged(aiohttp_client, clock)
+
+    await acked_after(ws, clock, empty_input(2))
+
+    assert log_lines(log, "input") == [
+        {"kind": "input", "host_ms": 1234.6, "session": "s-test", "config": "test-config", "message": empty_input(2)}
+    ]
+
+
+async def test_the_log_holds_a_rejected_input_as_received(aiohttp_client, clock) -> None:
+    ws, log = await open_logged(aiohttp_client, clock)
+    rejected = empty_input(2) | {"extra": "kept"}
+
+    await ws.send_json(rejected)
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["code"]) == (2, "invalid")
+    assert [line["message"] for line in log_lines(log, "input")] == [rejected]
+
+
+async def test_the_log_leaves_out_messages_other_than_input(aiohttp_client, clock) -> None:
+    ws, log = await open_logged(aiohttp_client, clock)
+
+    await ws.send_json(command("takeoff", 2, ["cf7"]))
+    await receive_reply(ws)
+    await ws.send_str("not json")
+    await receive_reply(ws)
+
+    assert log_lines(log, "input") == []
+
+
+class _RecordsTargets(MockDroneConnection):
+    def __init__(self, clock) -> None:
+        super().__init__(["cf7"], clock=clock, start={"cf7": Position(1.5, 2.0, 0.0)})
+        self.sent: list[dict] = []
+
+    def send_target(self, drone, target):
+        reply = super().send_target(drone, target)
+        self.sent.append({"drone": drone, "target": {"x": target.x, "y": target.y, "z": target.z}, "ok": reply.ok})
+        return reply
+
+
+async def test_the_log_holds_each_target_sent_to_the_drone_connection(aiohttp_client, clock) -> None:
+    drones = _RecordsTargets(clock)
+    ws, log = await open_logged(aiohttp_client, clock, drones)
+    await fly_and_unlock(ws, clock)
+    await acked_after(ws, clock, held_input(4, 1.5, 3.0))
+    await asyncio.sleep(0.1)
+
+    lines, sent = log_lines(log, "target"), list(drones.sent)
+
+    assert len(sent) > 3
+    assert [{"drone": line["drone"], "target": line["target"], "ok": line["ok"]} for line in lines] == sent
+    assert {(line["session"], line["config"]) for line in lines} == {("s-test", "test-config")}
+    assert all(line["host_ms"] == round(clock.s * 1000, 1) for line in lines[-3:])
+
+
+class _FullDisk(io.StringIO):
+    def write(self, text: str) -> int:
+        raise OSError("no space left on device")
+
+
+async def test_a_failed_log_write_keeps_the_operator_connected(aiohttp_client, clock, caplog) -> None:
+    client = await aiohttp_client(create_app(TEST_CONFIG, _RecordsTargets(clock), "s-test", clock, log=_FullDisk()))
+    ws = await client.ws_connect("/ws", timeout=ClientWSTimeout(ws_receive=2))
+    await say_hello(ws)
+
+    await fly_and_unlock(ws, clock)
+
+    assert (await acked_after(ws, clock, held_input(4, 1.5, 3.0)))["held"] is True
+    assert caplog.text.count("skipping message log lines") == 1

@@ -1,11 +1,12 @@
 import argparse
+import contextlib
 import importlib
 import ssl
 import time
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Protocol, get_args
+from typing import Literal, Protocol, TextIO, get_args
 
 from aiohttp import web
 
@@ -59,6 +60,12 @@ def _crazyswarm2(config: HostConfig, clock: Callable[[], float]) -> DroneConnect
     return construct(config, clock=clock)
 
 
+def open_message_log(path: Path | None) -> contextlib.AbstractContextManager[TextIO | None]:
+    if path is None:
+        return contextlib.nullcontext()
+    return open(path, "a", buffering=1, encoding="utf-8")
+
+
 def option_parser() -> argparse.ArgumentParser:
     """The bridge's command-line options. Without --web-app, Vite's dev server serves the page and forwards `/ws` here.
     With --web-app, --cert and --key, the bridge serves the built tablet web app and `/ws` from one HTTPS origin."""
@@ -70,6 +77,7 @@ def option_parser() -> argparse.ArgumentParser:
     parser.add_argument("--key", type=Path, help="private key file for --cert")
     parser.add_argument("--drones", choices=get_args(DroneOption), default="mock", help="drone connection")
     parser.add_argument("--config", choices=get_args(ConfigOption), default="course", help="host configuration")
+    parser.add_argument("--log", type=Path, help="file the bridge appends its message log to, one JSON line each")
     return parser
 
 
@@ -90,8 +98,13 @@ def main() -> None:
     except StartupError as error:
         parser.error(str(error))
     session = datetime.now().strftime("s%Y%m%d-%H%M%S")
-    app = create_app(config, drones, session=session, clock=clock, web_app_dir=args.web_app)
-    web.run_app(app, host=args.host, port=args.port, ssl_context=tls)
+    try:
+        log_file = open_message_log(args.log)
+    except OSError as error:
+        parser.error(f"--log: cannot open the message log ({error})")
+    with log_file as log:
+        app = create_app(config, drones, session=session, clock=clock, web_app_dir=args.web_app, log=log)
+        web.run_app(app, host=args.host, port=args.port, ssl_context=tls)
 
 
 if __name__ == "__main__":

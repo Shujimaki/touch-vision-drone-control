@@ -1,15 +1,22 @@
 import math
 from collections.abc import Callable, Mapping
 
-from touch_vision_drone_control.drone_connection import DroneConnection, FlightState, Position
+from touch_vision_drone_control.drone_connection import DroneConnection, FlightState, Position, Reply
 from touch_vision_drone_control.messages import GestureState
 
 SETPOINT_HZ = 30.0
 
 
 class SetpointStream:
-    def __init__(self, drones: DroneConnection, clock: Callable[[], float], input_timeout_s: float) -> None:
+    def __init__(
+        self,
+        drones: DroneConnection,
+        clock: Callable[[], float],
+        input_timeout_s: float,
+        on_target: Callable[[str, Position, Reply], None] | None = None,
+    ) -> None:
         self._drones = drones
+        self._on_target = on_target
         self._clock = clock
         self._input_timeout_s = input_timeout_s
         self._targets: dict[str, Position] = {}
@@ -69,7 +76,9 @@ class SetpointStream:
                 self._targets[drone] = Position(position.x, position.y, target.z)
         self._lifted.clear()
         for drone, target in self._targets.items():
-            self._drones.send_target(drone, target)
+            reply = self._drones.send_target(drone, target)
+            if self._on_target is not None:
+                self._on_target(drone, target, reply)
 
     def _expire(self) -> None:
         if self._last_input_s is not None and self._clock() - self._last_input_s > self._input_timeout_s:

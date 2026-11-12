@@ -18,6 +18,10 @@ _Avoid_: Ground station, backend server (for the machine)
 The program on the flight host that connects the tablet web app to the swarm. It speaks message format v1 to the tablet and drives the drones through Crazyswarm2.
 _Avoid_: Backend server, host server, ground station
 
+**Message log**:
+The file of JSON lines the Python command bridge writes when it starts with `--log`. It holds each received `input` and each target sent to the drone connection, so a test flight can show its command rate. It is not the trial recorder ([REQ-18](CONTEXT.md#evaluation-method-and-numerical-targets)).
+_Avoid_: Trial log, flight record
+
 **Drone connection**:
 The boundary inside the Python command bridge between the bridge's own logic and whatever moves the drones. A mock drone connection stands in for the swarm during development, and the Crazyswarm2 drone connection drives the real swarm.
 _Avoid_: Driver, adapter, backend
