@@ -33,6 +33,9 @@ beforeAll(async () => {
 }, 60_000);
 
 describe("built tablet web app loads everything from the bridge, with no internet", () => {
+  it("builds the main page and the flight test page", () => {
+    expect(builtFiles.map(({ file }) => file)).toEqual(expect.arrayContaining(["index.html", "flight-test.html"]));
+  });
   it("references its own assets", () => {
     expect(assetReferences().length).toBeGreaterThan(0);
   });

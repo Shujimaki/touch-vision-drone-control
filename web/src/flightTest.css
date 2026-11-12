@@ -1,0 +1,33 @@
+:root{
+  --bg:#0C0F0C; --panel:#181C18; --line:#2C342C; --line-2:#3E483D;
+  --tx:#E1E8DF; --tx-2:#9DAA9B; --tx-3:#687566;
+  --grn:#5FD068; --own:#25C6E8; --caut:#FF9A1F; --crit:#F2453D;
+  --f:"Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overscroll-behavior:none;background:var(--bg);color:var(--tx);font-family:var(--f);font-size:15px;line-height:1.4;overflow:hidden}
+button{font:inherit;color:inherit;border:0;cursor:pointer;touch-action:manipulation}
+.m{font-variant-numeric:tabular-nums}
+.ft{display:grid;grid-template-columns:clamp(240px,26vw,340px) minmax(0,1fr);height:100%}
+.ft-side{display:flex;flex-direction:column;gap:16px;padding:16px;background:var(--panel);border-right:1px solid var(--line);overflow:auto}
+.ft-head h1{font-size:18px;font-weight:600}
+.ft-drone{color:var(--own);font-size:13px;margin-left:6px}
+.ft-link{display:flex;flex-direction:column;margin-top:8px;padding:8px 10px;border-radius:4px;border:1px solid var(--line-2)}
+.ft-link[data-state="connected"]{border-color:var(--grn);color:var(--grn)}
+.ft-link[data-state="failed"]{border-color:var(--crit);color:var(--crit);background:#1A0605}
+.ft-link span{font-size:13px}
+.ft-config{margin-top:6px;font-size:12px;color:var(--tx-3)}
+.ft-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ft-btn{min-height:56px;border-radius:6px;font-weight:600;font-size:16px;background:#283028}
+.ft-btn:disabled{opacity:.4;cursor:default}
+.ft-btn.to{background:#3E8F46;color:#07120A}
+.ft-btn.st{grid-column:1/-1;background:var(--crit);color:#fff;min-height:64px;font-size:18px}
+.ft-reply{padding:8px 10px;border-radius:4px;font-size:13px;background:#1F241F}
+.ft-reply[data-ok="false"]{color:var(--caut);border:1px solid var(--caut)}
+.ft-tel{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:14px}
+.ft-tel dt{color:var(--tx-2)}
+.ft-tel dd[data-warn="true"]{color:var(--caut)}
+.ft-note{font-size:12px;color:var(--tx-3)}
+.ft-main{position:relative;min-width:0;min-height:0;background:#0A0E0B}
+#boxSvg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;user-select:none;-webkit-user-select:none}
+#boxSvg text{font-family:var(--f);font-size:13px}

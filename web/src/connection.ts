@@ -1,6 +1,6 @@
 import {
   VERSION, parseHostMessage,
-  type Command, type CommandBody, type DroneTelemetry, type FlightCommand, type Frame, type GestureState, type Held, type Hello, type HostConfig,
+  type Command, type CommandBody, type CommandName, type DroneTelemetry, type FlightCommand, type Frame, type GestureState, type Held, type Hello, type HostConfig,
   type Input, type Reply, type Telemetry, type Welcome,
 } from "./protocol";
 import { clamp } from "./format";
@@ -33,6 +33,7 @@ export interface ConnectionOptions {
   onState: (state: ConnectionState) => void;
   onTelemetry: (telemetry: Telemetry) => void;
   onHostLost: (reason: "host_lost") => void;
+  onCommandReply?: (name: CommandName, reply: Reply) => void;
   gesture?: () => GestureReading;
   openSocket?: () => SocketLike;
   warn?: (message: string) => void;
@@ -49,6 +50,7 @@ export interface Connection {
   drag(contact: Contact): AcceptedTarget | null;
   /** Releases the drone a finger holds, if any. */
   lift(pointerId: number): void;
+  releaseAllAndSendInput(): void;
 }
 
 function coveringSquareZone(config: HostConfig) {
@@ -89,13 +91,14 @@ function causeOf(reply: Reply, connected: boolean): FailureCause | null {
 
 export function connect(options: ConnectionOptions): Connection {
   const { tabletClockMs, onState, onTelemetry, onHostLost } = options;
-  const { openSocket = () => new WebSocket(socketUrl(location)), warn = console.warn, gesture = idleGesture } = options;
+  const { openSocket = () => new WebSocket(socketUrl(location)), warn = console.warn, gesture = idleGesture, onCommandReply } = options;
   let state: ConnectionState = { status: "connecting" }, everConnected = false;
   const setState = (next: ConnectionState) => { state = next; onState(state); };
   const lostCause = (): FailureCause => everConnected ? "bridge_lost" : "no_bridge";
   const tabletMs = () => Math.round(tabletClockMs() * 10) / 10;
   const contacts = new Map<number, Held>();
   let latestDrones = new Map<string, DroneTelemetry>();
+  let sendInputNow: (() => void) | null = null;
 
   function hold(contact: Pick<Contact, "pointerId" | "timeStamp">, drone: string): boolean {
     const seen = latestDrones.get(drone);
@@ -116,9 +119,15 @@ export function connect(options: ConnectionOptions): Connection {
     return to;
   }
 
+  function releaseAllAndSendInput(): void {
+    contacts.clear();
+    sendInputNow?.();
+  }
+
   function attempt(): void {
     const socket = openSocket();
     let seq = 0, refused: FailureCause | null = null, rttMs: number | null = null;
+    const commands = new Map<number, CommandName>();
     let deadline = setTimeout(() => fail(lostCause()), WELCOME_TIMEOUT_MS), inputTimer: ReturnType<typeof setInterval> | undefined;
     const expectTelemetryWithin = (ms: number) => { clearTimeout(deadline); deadline = setTimeout(() => fail("bridge_lost"), ms); };
 
@@ -134,6 +143,7 @@ export function connect(options: ConnectionOptions): Connection {
     function fail(cause: FailureCause): void {
       clearTimeout(deadline);
       clearInterval(inputTimer);
+      sendInputNow = null;
       contacts.clear();
       latestDrones = new Map();
       socket.onopen = null;
@@ -153,6 +163,7 @@ export function connect(options: ConnectionOptions): Connection {
         everConnected = true;
         const send = (body: CommandBody) => {
           const message: Command = { type: "command", v: VERSION, seq: ++seq, t_ms: tabletMs(), ...body };
+          commands.set(message.seq, body.name);
           socket.send(JSON.stringify(message));
         };
         const command = (name: FlightCommand, drones: string[]) => send({ name, args: { drones } });
@@ -160,6 +171,7 @@ export function connect(options: ConnectionOptions): Connection {
         setState({ status: "connected", welcome: message, command, stop });
         expectTelemetryWithin(message.config.telemetry_timeout_ms);
         inputTimer = setInterval(sendInput, 1000 / message.config.input_hz);
+        sendInputNow = sendInput;
       } else if (message.type === "telemetry") {
         if (state.status !== "connected") return;
         expectTelemetryWithin(state.welcome.config.telemetry_timeout_ms);
@@ -169,7 +181,10 @@ export function connect(options: ConnectionOptions): Connection {
           rttMs = Math.round(((tabletClockMs() - t_ms) - (message.host_ms - host_rx_ms)) * 10) / 10;
         }
         onTelemetry(message);
-      } else if (!message.ok) {
+      } else {
+        const name = message.ref === null ? undefined : commands.get(message.ref);
+        if (message.ref !== null && name !== undefined) { commands.delete(message.ref); onCommandReply?.(name, message); }
+        if (message.ok) return;
         refused = causeOf(message, state.status === "connected") ?? refused;
         warn(`the bridge rejected message ${message.ref}: ${message.code} (${message.detail})`);
       }
@@ -187,5 +202,5 @@ export function connect(options: ConnectionOptions): Connection {
 
   setState(state);
   attempt();
-  return { state: () => state, hold, drag, lift: pointerId => { contacts.delete(pointerId); } };
+  return { state: () => state, hold, drag, lift: pointerId => { contacts.delete(pointerId); }, releaseAllAndSendInput };
 }
