@@ -1,5 +1,8 @@
+import asyncio
+import contextlib
 import json
 import logging
+import math
 import time
 import weakref
 from collections.abc import Callable
@@ -8,16 +11,24 @@ from typing import Any, assert_never
 from aiohttp import WSCloseCode, WSMsgType, web
 from pydantic import ValidationError
 
+from touch_vision_drone_control.drone_connection import DroneConnection, DroneReport, Position
 from touch_vision_drone_control.messages import (
     TABLET_MESSAGE,
+    Ack,
+    Altitude,
     Command,
+    DefensiveHover,
+    DroneTelemetry,
     Event,
     Hello,
     HostConfig,
     Input,
+    Point,
+    Ranges,
     Reply,
     ReplyCode,
     Role,
+    Telemetry,
     Welcome,
     encode,
 )
@@ -25,6 +36,7 @@ from touch_vision_drone_control.messages import (
 _log = logging.getLogger(__name__)
 
 _INPUT_REPLY_INTERVAL_S = 1.0
+_HEARTBEAT_S = 2.0
 
 
 class _OperatorSlot:
@@ -46,6 +58,8 @@ class _OperatorSlot:
 
 
 CONFIG = web.AppKey("config", HostConfig)
+DRONES = web.AppKey("drones", DroneConnection)
+TARGETS = web.AppKey("targets", dict[str, Position])
 CLOCK = web.AppKey("clock", Callable[[], float])
 SESSION = web.AppKey("session", str)
 OPERATOR = web.AppKey("operator", _OperatorSlot)
@@ -54,12 +68,15 @@ SOCKETS = web.AppKey("sockets", weakref.WeakSet)
 
 def create_app(
     config: HostConfig,
+    drones: DroneConnection,
     session: str,
     clock: Callable[[], float] = time.monotonic,
 ) -> web.Application:
-    """Build the bridge's web application. `clock` is the host monotonic clock, in seconds."""
+    """Build the bridge's web application. `clock` is the host monotonic clock, in seconds, shared with `drones`."""
     app = web.Application()
     app[CONFIG] = config
+    app[DRONES] = drones
+    app[TARGETS] = {}
     app[CLOCK] = clock
     app[SESSION] = session
     app[OPERATOR] = _OperatorSlot()
@@ -75,10 +92,11 @@ async def _close_sockets(app: web.Application) -> None:
 
 
 async def _handle_socket(request: web.Request) -> web.WebSocketResponse:
-    ws = web.WebSocketResponse()
+    ws = web.WebSocketResponse(heartbeat=_HEARTBEAT_S)
     await ws.prepare(request)
     request.app[SOCKETS].add(ws)
     connection = _Connection(request.app, ws)
+    telemetry = asyncio.create_task(connection.stream_telemetry())
     try:
         async for msg in ws:
             if msg.type is WSMsgType.TEXT:
@@ -89,6 +107,9 @@ async def _handle_socket(request: web.Request) -> web.WebSocketResponse:
                 _log.warning("closing a socket after %s: %s", msg.type.name, ws.exception())
                 break
     finally:
+        telemetry.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await telemetry
         request.app[OPERATOR].release(connection)
     return ws
 
@@ -102,6 +123,9 @@ class _Connection:
         self._last_seq: int | None = None
         self._last_input_t_ms: float | None = None
         self._last_input_reply_s: dict[ReplyCode, float] = {}
+        self._ack = Ack(seq=None, t_ms=None, host_rx_ms=None)
+        self._welcomed = asyncio.Event()
+        self._failure: str | None = None
 
     async def receive(self, text: str) -> None:
         raw = _json_object(text)
@@ -149,6 +173,7 @@ class _Connection:
                     await self._reject(ref, "invalid", detail, input_stream=True)
                 else:
                     self._last_input_t_ms = message.t_ms
+                    self._ack = Ack(seq=message.seq, t_ms=message.t_ms, host_rx_ms=self._host_ms())
             case Event():
                 pass
             case _:
@@ -168,6 +193,49 @@ class _Connection:
                 config=self._app[CONFIG],
             )
         )
+        self._welcomed.set()
+
+    async def stream_telemetry(self) -> None:
+        """Send telemetry at the configured rate from `welcome` until the socket closes. A failed tick is skipped."""
+        await self._welcomed.wait()
+        loop = asyncio.get_running_loop()
+        interval_s = 1 / self._app[CONFIG].telemetry_hz
+        next_tick = loop.time()
+        while not self._ws.closed:
+            text = self._telemetry_text()
+            if text is not None:
+                try:
+                    await self._ws.send_str(text)
+                except ConnectionResetError:
+                    return
+            next_tick += interval_s
+            await asyncio.sleep(max(0.0, next_tick - loop.time()))
+
+    def _telemetry_text(self) -> str | None:
+        try:
+            reports = self._app[DRONES].reports()
+        except Exception:
+            self._note_failure("the drone connection failed to report")
+            return None
+        targets = self._app[TARGETS]
+        for report in reports:
+            if all(math.isfinite(v) for v in (report.position.x, report.position.y, report.position.z)):
+                targets.setdefault(report.drone, report.position)
+        try:
+            text = encode(_telemetry(self._next_seq(), self._app[CLOCK](), self._ack, reports, targets))
+        except ValueError:
+            self._note_failure("a drone report does not fit message format v1")
+            return None
+        if self._failure is not None:
+            _log.info("telemetry recovered after: %s", self._failure)
+            self._failure = None
+        return text
+
+    def _note_failure(self, what: str) -> None:
+        """Log the first failed tick of a run, not every tick at the telemetry rate."""
+        if self._failure is None:
+            _log.exception("skipping telemetry ticks: %s", what)
+        self._failure = what
 
     async def _reject(self, ref: int | None, code: ReplyCode, detail: str, input_stream: bool = False) -> None:
         if input_stream and not self._input_reply_due(code):
@@ -204,6 +272,41 @@ class _Connection:
 
     def _host_ms(self) -> float:
         return round(self._app[CLOCK]() * 1000, 1)
+
+
+def _telemetry(seq: int, now_s: float, ack: Ack, reports: list[DroneReport], targets: dict[str, Position]) -> Telemetry:
+    return Telemetry(
+        seq=seq,
+        host_ms=round(now_s * 1000, 1),
+        ack=ack,
+        mode="course",
+        trial=None,
+        altitude=Altitude(rate=0.0, blocked_by=None, reason=None),
+        drones=[_drone_telemetry(r, targets.get(r.drone, r.position), now_s) for r in reports],
+    )
+
+
+def _drone_telemetry(report: DroneReport, target: Position, now_s: float) -> DroneTelemetry:
+    position, ranges, hover = report.position, report.ranges, report.defensive_hover
+    return DroneTelemetry(
+        id=report.drone,
+        held=False,
+        state=report.state.value,
+        link=report.link.value,
+        x=_v1_length(position.x),
+        y=_v1_length(position.y),
+        z=_v1_length(position.z),
+        yaw=None,
+        pos_age_ms=round((now_s - report.position_measured_at) * 1000, 1),
+        cmd=Point(x=_v1_length(target.x), y=_v1_length(target.y), z=_v1_length(target.z)),
+        ranges=Ranges(front=ranges.front, back=ranges.back, left=ranges.left, right=ranges.right, up=ranges.up),
+        defensive_hover=None if hover is None else DefensiveHover(dir=hover.direction, range=_v1_length(hover.range_m)),
+        battery_v=report.battery_v,
+    )
+
+
+def _v1_length(meters: float) -> float:
+    return round(meters, 3)
 
 
 def _json_object(text: str) -> dict[str, Any] | None:

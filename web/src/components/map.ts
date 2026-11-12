@@ -80,7 +80,6 @@ export function courseLayer(c: Course, v: View, K: Pal): string {
   return g;
 }
 
-// One drone entity: target line, proximity ring, above/below indicators, heading, icon and altitude bar.
 export function droneEntity(d: Drone, c: Course, v: View, K: Pal, R: Readings): string {
   const X = px(v, d.x), Y = py(v, d.y), held = d.held, grounded = d.z <= 0.02;
   let g = "";
@@ -132,7 +131,7 @@ export function droneEntity(d: Drone, c: Course, v: View, K: Pal, R: Readings): 
   g += `<path d="M${bx - 2} ${zy(Z.max)}H${bx + bw + 2}M${bx - 2} ${zy(Z.min)}H${bx + bw + 2}" stroke="${K.caut}" stroke-opacity=".7" stroke-width="1"/>`;
   g += `<circle cx="${bx + bw / 2}" cy="${ly}" r="6" fill="${K.iconTx}" fill-opacity=".12"/><circle cx="${bx + bw / 2}" cy="${ly}" r="3" fill="${K.iconTx}" fill-opacity=".95"/>`;
   g += `<text x="${X}" y="${Y - PROX_R - 39}" fill="${K.tx2}" font-size="10" text-anchor="middle">${d.z.toFixed(2)} m</text></g>`;
-  return g;
+  return d.stale ? `<g opacity="0.35">${g}</g>` : g;
 }
 
 export const TRAIL_MS = 700;   // a trail point fades out over this long

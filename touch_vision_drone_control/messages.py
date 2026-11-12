@@ -171,6 +171,74 @@ class Reply(_Strict):
         return self
 
 
-def encode(message: Welcome | Reply) -> str:
+class Ack(_Strict):
+    seq: Seq | None
+    t_ms: float | None
+    host_rx_ms: float | None
+
+
+class Trial(_Strict):
+    id: str
+    running: bool
+    elapsed_ms: float
+
+
+class Altitude(_Strict):
+    rate: float
+    blocked_by: str | None
+    reason: Literal["z_max", "z_min", "defensive_hover"] | None
+
+
+class Point(_Strict):
+    x: float
+    y: float
+    z: float
+
+
+Direction = Literal["front", "back", "left", "right", "up"]
+
+
+class Ranges(_Strict):
+    front: float | None
+    back: float | None
+    left: float | None
+    right: float | None
+    up: float | None
+
+
+class DefensiveHover(_Strict):
+    dir: Direction
+    range: float
+
+
+class DroneTelemetry(_Strict):
+    id: str
+    held: bool
+    state: Literal["grounded", "taking_off", "flying", "landing", "stopped"]
+    link: Literal["ok", "lost"]
+    x: float | None
+    y: float | None
+    z: float | None
+    yaw: float | None
+    pos_age_ms: float | None
+    cmd: Point
+    ranges: Ranges
+    defensive_hover: DefensiveHover | None
+    battery_v: float | None
+
+
+class Telemetry(_Strict):
+    type: Literal["telemetry"] = "telemetry"
+    v: Literal[1] = 1
+    seq: Seq
+    host_ms: float
+    ack: Ack
+    mode: Literal["course", "gesture_subtest"]
+    trial: Trial | None
+    altitude: Altitude
+    drones: list[DroneTelemetry]
+
+
+def encode(message: Welcome | Reply | Telemetry) -> str:
     """Serialize a host message as JSON text. Raises `ValueError` rather than write NaN or Infinity."""
     return json.dumps(message.model_dump(mode="json"), allow_nan=False)

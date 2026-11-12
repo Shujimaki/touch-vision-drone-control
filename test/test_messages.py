@@ -6,7 +6,7 @@ from protocol_examples import example, example_text
 
 from touch_vision_drone_control.host_config import PLACEHOLDER_CONFIG
 
-from touch_vision_drone_control.messages import TABLET_MESSAGE, Reply, Welcome, encode
+from touch_vision_drone_control.messages import TABLET_MESSAGE, Reply, Telemetry, Welcome, encode
 
 TABLET_EXAMPLES = ["hello", "input-three-drones-climbing", "event-release-cancelled", "event-restriction-start",
                    "command-takeoff"]
@@ -19,8 +19,11 @@ def test_every_tablet_example_parses(name: str) -> None:
     assert message.type == name.split("-")[0]
 
 
-@pytest.mark.parametrize(("name", "model"), [("welcome", Welcome), ("reply-rejected", Reply)])
-def test_every_host_example_parses(name: str, model: type[Welcome] | type[Reply]) -> None:
+@pytest.mark.parametrize(
+    ("name", "model"),
+    [("welcome", Welcome), ("reply-rejected", Reply), ("telemetry-cf3-defensive-hover", Telemetry)],
+)
+def test_every_host_example_parses(name: str, model: type[Welcome | Reply | Telemetry]) -> None:
     model.model_validate_json(example_text(name))
 
 

@@ -29,3 +29,9 @@ _Avoid_: Fleet, team (for the drones)
 **Motion capture machine**:
 A separate computer that runs the lab's motion capture software and publishes measured drone positions to the flight host.
 _Avoid_: Mocap server, tracking host
+
+## Map
+
+**Target marker**:
+The map symbol for where a drone is heading: the target the Python command bridge holds for it. It differs from the [drone entity](CONTEXT.md#shared-glossary), which shows the measured position.
+_Avoid_: Ghost, cursor, setpoint marker

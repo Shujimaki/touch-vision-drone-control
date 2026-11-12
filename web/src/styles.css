@@ -408,7 +408,8 @@ html:has(.app[data-mode="compact"]),html:has(.app[data-mode="compact"]) body{ove
 .tbtn2:active{border-color:var(--grn)}
 .link{position:absolute;right:6px;top:6px;z-index:2;pointer-events:none;padding:3px 8px;background:var(--ovl);border:1px solid var(--line-2);border-radius:var(--r);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx-2);white-space:nowrap}
 .link[data-state="connected"]{color:var(--grn);border-color:var(--grn)}
-.link[data-state="disconnected"]{color:var(--crit);border-color:var(--crit)}
+.link[data-state="failed"]{color:var(--crit);border-color:var(--crit)}
+.link small{display:block;font-size:10px;font-weight:600;letter-spacing:0;text-transform:none}
 .gear{width:38px;height:38px;display:grid;place-items:center;color:var(--tx-2);border:1px solid var(--line-2);border-radius:var(--r)}
 .gear[aria-expanded="true"]{color:var(--grn);border-color:var(--grn)}
 .side{padding:2px 0 2px 2px}
