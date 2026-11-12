@@ -24,9 +24,21 @@ The tablet simulates nothing itself. The only messages are the connection handsh
 
 - no altitude change, sensor readings, collisions, or defensive hover;
 - no gesture recognition, and no trials that start or end. The input's altitude channel always reports `idle` with rate 0;
-- no events, and no stop or trial commands. The page shows the connection state in the map's top-right corner. It draws each drone entity at its measured position from telemetry. The other panels still show the sample data.
+- no events, and no trial commands. The main page sends no stop command. The flight test page does. The page shows the connection state in the map's top-right corner. It draws each drone entity at its measured position from telemetry. The other panels still show the sample data.
 
 Without a bridge, a dragged drone moves only on the map. Its sample sensor readings belong to its starting spot, so they clear once it moves.
+
+## Flight test page
+
+`flight-test.html` is a second page for flying cf1 in the takeoff frame ([ADR 0007](../docs/adr/0007-fly-one-drone-without-motive.md)). Start the bridge with `--config takeoff`, then open `/flight-test.html`. It is for test flights, not trials.
+
+- **Box:** the page draws `welcome.config.course.capture_volume` with +x up the screen and +y to the left. A label above the box is for the wall that the taped floor arrow points to. The page does not know the lab's wall names yet, so the label says "the wall the floor arrow points to".
+- **Buttons:** Take off and Land send `takeoff` and `land` for cf1. Stop sends `stop`, which has no drone list. The page shows the bridge's reply to the last command, with the reason when the bridge refuses it.
+- **Drag:** hold the drone circle with one finger once cf1 is flying, and drag. The page sends one held entry on the connection's 30 Hz input timer, with the altitude channel at `idle`. A finger outside the box sends no new target. When the finger lifts, the bridge holds the drone where it is ([ADR 0004](../docs/adr/0004-held-targets-and-release.md)).
+- **Telemetry:** the panel shows flight state, measured position, target, position age, radio link, and battery voltage. A dashed target marker shows the target.
+- **Loss:** when the page is hidden, it releases the finger and sends a final `input` at once. On bridge loss the badge reads "Bridge lost, retrying", and the buttons are disabled until the page reconnects.
+
+`src/takeoffView.ts` maps a screen point to a takeoff-frame point and back.
 
 ## Run it
 

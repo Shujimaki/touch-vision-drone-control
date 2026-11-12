@@ -11,7 +11,10 @@ const BRIDGE = "http://127.0.0.1:8765";
 // base "./" keeps asset paths relative, so the build opens from any folder or sub-path.
 export default defineConfig({
   base: "./",
-  build: { target: "es2022" },
+  build: {
+    target: "es2022",
+    rolldownOptions: { input: { main: join(import.meta.dirname, "index.html"), flightTest: join(import.meta.dirname, "flight-test.html") } },
+  },
   server: {
     host: true,
     https: existsSync(CERT) && existsSync(KEY) ? { cert: readFileSync(CERT), key: readFileSync(KEY) } : undefined,

@@ -14,6 +14,8 @@ export type CommandBody =
   | { name: FlightCommand; args: { drones: string[] } }
   | { name: "stop"; args: Record<string, never> };
 
+export type CommandName = CommandBody["name"];
+
 export type Command = { type: "command"; v: 1; seq: number; t_ms: number } & CommandBody;
 
 export interface Held { id: string; x: number; y: number; touch_ms: number; follow: boolean }

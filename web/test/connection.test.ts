@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connect, linkLabel, socketUrl, type Connection, type ConnectionOptions, type ConnectionState, type SocketLike } from "../src/connection";
-import { parseHostMessage, type FlightCommand, type Held, type Welcome } from "../src/protocol";
+import { parseHostMessage, type FlightCommand, type Held, type Reply, type Welcome } from "../src/protocol";
 
 const examples = join(import.meta.dirname, "..", "..", "protocol", "examples");
 const example = (name: string): Record<string, unknown> => JSON.parse(readFileSync(join(examples, name + ".json"), "utf8"));
@@ -23,16 +23,17 @@ class FakeSocket implements SocketLike {
 
 function start(clock: () => number = () => 5321.7, gesture?: ConnectionOptions["gesture"]) {
   const sockets: FakeSocket[] = [], states: ConnectionState["status"][] = [], warnings: string[] = [];
-  const telemetry: unknown[] = [], hostLost: string[] = [];
+  const telemetry: unknown[] = [], hostLost: string[] = [], commandReplies: [string, Reply][] = [];
   const connection = connect({
     openSocket: () => { const s = new FakeSocket(); sockets.push(s); return s; },
     tabletClockMs: clock, client: "tablet-web 0.1.0", userAgent: "TestAgent/1.0", gesture,
     onState: s => states.push(s.status), warn: w => warnings.push(w),
     onTelemetry: t => telemetry.push(t), onHostLost: reason => hostLost.push(reason),
+    onCommandReply: (name, reply) => commandReplies.push([name, reply]),
   });
   const socket = sockets[0]!;
   const latest = () => sockets[sockets.length - 1]!;
-  return { socket, sockets, latest, states, warnings, telemetry, hostLost, connection };
+  return { socket, sockets, latest, states, warnings, telemetry, hostLost, commandReplies, connection };
 }
 
 const TELEMETRY = example("telemetry-cf3-defensive-hover");
@@ -268,6 +269,28 @@ describe("connection", () => {
     expect(latest().sent.map(m => [m["type"], m["seq"]])).toEqual([["hello", 1], ["command", 2]]);
   });
 
+  it("reports each command's reply with the command name, including why it was refused", () => {
+    const { socket, connection, commandReplies } = connected();
+    command(connection, "takeoff");
+    connectedState(connection).stop();
+    const refused = { ...example("reply-rejected"), ref: 2, code: "not_allowed", detail: "cf1 is not grounded" };
+    const accepted = { ...example("reply-rejected"), ref: 3, ok: true, code: null, detail: null };
+
+    socket.receive(refused);
+    socket.receive(accepted);
+
+    expect(commandReplies).toEqual([["takeoff", refused], ["stop", accepted]]);
+  });
+
+  it("does not report a reply to an input as a command reply", () => {
+    const { socket, commandReplies } = connected();
+    vi.advanceTimersByTime(40);
+
+    socket.receive({ ...example("reply-rejected"), ref: 2, code: "invalid", detail: "bad held entry" });
+
+    expect(commandReplies).toEqual([]);
+  });
+
   it("ignores telemetry before welcome", () => {
     const { socket, telemetry } = start();
     socket.open();
@@ -439,6 +462,87 @@ describe("input stream", () => {
     socket.open();
 
     expect(connection.hold({ pointerId: 7, timeStamp: 5300 }, "cf1")).toBe(false);
+  });
+});
+
+const TAKEOFF_WELCOME = {
+  ...WELCOME,
+  config: {
+    ...(WELCOME["config"] as object), id: "takeoff-draft-0.1", drones: ["cf1"], z_max: 1.0,
+    course: {
+      room: { x_min: -0.6, x_max: 0.6, y_min: -0.6, y_max: 0.6 },
+      capture_volume: { x_min: -0.5, x_max: 0.5, y_min: -0.5, y_max: 0.5 },
+      restricted_zone: { x_min: 0.52, x_max: 0.58, y_min: 0.52, y_max: 0.58 },
+      obstacles: [], hoops: [], pads: [{ id: "cf1", x: 0, y: 0 }],
+    },
+  },
+};
+const CF1_FLYING = {
+  ...TELEMETRY,
+  drones: [{ ...(TELEMETRY["drones"] as object[])[0], id: "cf1", state: "flying", x: 0, y: 0, z: 0.4, cmd: { x: 0, y: 0, z: 0.4 } }],
+};
+
+describe("flight test page input", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  function flyingInTakeoffBox() {
+    const c = start();
+    c.socket.open();
+    c.socket.receive(TAKEOFF_WELCOME);
+    c.socket.receive(CF1_FLYING);
+    return c;
+  }
+
+  it("sends a drag as exactly one held entry with the takeoff-frame target", () => {
+    const { socket, connection } = flyingInTakeoffBox();
+
+    connection.hold({ pointerId: 3, timeStamp: 100 }, "cf1");
+    connection.drag({ pointerId: 3, timeStamp: 120, x: 0.3, y: -0.2 });
+    vi.advanceTimersByTime(100);
+
+    expect(inputs(socket).at(-1)).toMatchObject({
+      held: [{ id: "cf1", x: 0.3, y: -0.2, touch_ms: 120, follow: true }],
+      gesture: { state: "idle", rate: 0, neutral_y: null },
+    });
+  });
+
+  it("releases every contact and sends a final input at once when the page is hidden", () => {
+    const { socket, connection } = flyingInTakeoffBox();
+    connection.hold({ pointerId: 3, timeStamp: 100 }, "cf1");
+    vi.advanceTimersByTime(40);
+    const before = inputs(socket).length;
+
+    connection.releaseAllAndSendInput();
+
+    expect(inputs(socket)).toHaveLength(before + 1);
+    expect(inputs(socket).at(-1)).toMatchObject({ held: [], gesture: { state: "idle", rate: 0, neutral_y: null } });
+    expect(connection.drag({ pointerId: 3, timeStamp: 130, x: 0.3, y: 0 })).toBeNull();
+  });
+
+  it("sends no input on release before welcome or after the bridge is lost", () => {
+    const { socket, sockets, connection } = start();
+    socket.open();
+    connection.releaseAllAndSendInput();
+    expect(inputs(socket)).toEqual([]);
+
+    socket.receive(TAKEOFF_WELCOME);
+    vi.advanceTimersByTime(TELEMETRY_TIMEOUT_MS);
+    const sentBeforeLoss = socket.sent.length;
+    connection.releaseAllAndSendInput();
+
+    expect(sockets[0]!.sent).toHaveLength(sentBeforeLoss);
+  });
+
+  it("reports a command reply once, even if the bridge repeats it", () => {
+    const { socket, connection, commandReplies } = flyingInTakeoffBox();
+    connectedState(connection).stop();
+    const accepted = { ...example("reply-rejected"), ref: 2, ok: true, code: null, detail: null };
+
+    socket.receive(accepted);
+    socket.receive(accepted);
+
+    expect(commandReplies).toEqual([["stop", accepted]]);
   });
 });
 
