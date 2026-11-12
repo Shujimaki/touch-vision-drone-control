@@ -1,3 +1,10 @@
+# Fix colcon ast.literal_eval bug with packaging SpecifierSet on Ubuntu 24.04
+try:
+    from packaging.specifiers import SpecifierSet
+    SpecifierSet.__repr__ = lambda self: repr(str(self))
+except ImportError:
+    pass
+
 from setuptools import find_packages, setup
 
 package_name = 'touch_vision_drone_control'
