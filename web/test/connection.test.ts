@@ -39,10 +39,14 @@ const TELEMETRY = example("telemetry-cf3-defensive-hover");
 const WELCOME = example("welcome");
 const TELEMETRY_TIMEOUT_MS = (WELCOME["config"] as { telemetry_timeout_ms: number }).telemetry_timeout_ms;
 
-function command(connection: Connection, name: FlightCommand): void {
+function connectedState(connection: Connection) {
   const state = connection.state();
   if (state.status !== "connected") throw new Error(`expected a connected state, got ${state.status}`);
-  state.command(name, ["cf1"]);
+  return state;
+}
+
+function command(connection: Connection, name: FlightCommand): void {
+  connectedState(connection).command(name, ["cf1"]);
 }
 
 function connected(clock?: () => number, gesture?: ConnectionOptions["gesture"]) {
@@ -241,6 +245,14 @@ describe("connection", () => {
     command(connection, "takeoff");
 
     expect(socket.sent[1]).toEqual({ ...example("command-takeoff"), seq: 2, t_ms: 5321.7, args: { drones: ["cf1"] } });
+  });
+
+  it("sends stop with empty args", () => {
+    const { socket, connection } = connected();
+
+    connectedState(connection).stop();
+
+    expect(socket.sent[1]).toEqual({ ...example("command-takeoff"), seq: 2, t_ms: 5321.7, name: "stop", args: {} });
   });
 
   it("numbers commands from 2 again on a new socket", () => {
@@ -473,7 +485,7 @@ function parsedWelcome(): Welcome {
 describe("linkLabel", () => {
   it.each<[ConnectionState, string, string | null]>([
     [{ status: "connecting" }, "Connecting", null],
-    [{ status: "connected", welcome: parsedWelcome(), command: () => {} }, "Connected", null],
+    [{ status: "connected", welcome: parsedWelcome(), command: () => {}, stop: () => {} }, "Connected", null],
     [{ status: "failed", cause: "bridge_lost" }, "Connection failed", "Bridge lost, retrying"],
     [{ status: "failed", cause: "no_bridge" }, "Connection failed", "No bridge, retrying"],
     [{ status: "failed", cause: "operator_busy" }, "Connection failed", "Operator busy, retrying"],

@@ -25,6 +25,7 @@ from touch_vision_drone_control.messages import (
     Hello,
     HostConfig,
     Input,
+    NoArgs,
     Point,
     Ranges,
     Reply,
@@ -208,6 +209,8 @@ class _Connection:
                 await self._reject(ref, "not_allowed", detail, input_stream=isinstance(message, Input))
             case Command(name="takeoff" | "land"):
                 await self._takeoff_or_land(message, ref)
+            case Command(name="stop"):
+                await self._stop(message, ref)
             case Command():
                 await self._reject(ref, "not_allowed", f"{message.name} is not supported yet")
             case Input():
@@ -260,7 +263,20 @@ class _Connection:
         if refused:
             await self._reject(ref, "not_allowed", "; ".join(refused))
             return
-        await self._send(Reply(seq=self._next_seq(), host_ms=self._host_ms(), ref=ref, ok=True, code=None, detail=None))
+        await self._accept(ref)
+
+    async def _stop(self, command: Command, ref: int) -> None:
+        try:
+            NoArgs.model_validate(command.args)
+        except ValidationError as error:
+            await self._reject(ref, "invalid", f"args.{_first_error(error)}")
+            return
+        self._app[SETPOINTS].release_and_lock()
+        reply = self._app[DRONES].stop()
+        if not reply.ok:
+            await self._reject(ref, "not_allowed", str(reply.reason))
+            return
+        await self._accept(ref)
 
     async def _welcome(self, hello: Hello, ref: int) -> None:
         if hello.role == "operator" and not self._app[OPERATOR].claim(self):
@@ -320,6 +336,9 @@ class _Connection:
         if self._failure is None:
             _log.exception("skipping telemetry ticks: %s", what)
         self._failure = what
+
+    async def _accept(self, ref: int) -> None:
+        await self._send(Reply(seq=self._next_seq(), host_ms=self._host_ms(), ref=ref, ok=True, code=None, detail=None))
 
     async def _reject(self, ref: int | None, code: ReplyCode, detail: str, input_stream: bool = False) -> None:
         if input_stream and not self._input_reply_due(code):

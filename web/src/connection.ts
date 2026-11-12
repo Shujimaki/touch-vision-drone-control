@@ -1,6 +1,6 @@
 import {
   VERSION, parseHostMessage,
-  type Command, type DroneTelemetry, type FlightCommand, type Frame, type GestureState, type Held, type Hello, type HostConfig,
+  type Command, type CommandBody, type DroneTelemetry, type FlightCommand, type Frame, type GestureState, type Held, type Hello, type HostConfig,
   type Input, type Reply, type Telemetry, type Welcome,
 } from "./protocol";
 import { clamp } from "./format";
@@ -10,7 +10,7 @@ export type FailureCause = "bridge_lost" | "no_bridge" | "operator_busy" | "vers
 
 export type ConnectionState =
   | { status: "connecting" }
-  | { status: "connected"; welcome: Welcome; command: (name: FlightCommand, drones: string[]) => void }
+  | { status: "connected"; welcome: Welcome; command: (name: FlightCommand, drones: string[]) => void; stop: () => void }
   | { status: "failed"; cause: FailureCause };
 
 export interface SocketLike {
@@ -151,11 +151,13 @@ export function connect(options: ConnectionOptions): Connection {
       if (message === null) warn(`ignored a message from the bridge: ${String(data).slice(0, 120)}`);
       else if (message.type === "welcome") {
         everConnected = true;
-        const command = (name: FlightCommand, drones: string[]) => {
-          const message: Command = { type: "command", v: VERSION, seq: ++seq, t_ms: tabletMs(), name, args: { drones } };
+        const send = (body: CommandBody) => {
+          const message: Command = { type: "command", v: VERSION, seq: ++seq, t_ms: tabletMs(), ...body };
           socket.send(JSON.stringify(message));
         };
-        setState({ status: "connected", welcome: message, command });
+        const command = (name: FlightCommand, drones: string[]) => send({ name, args: { drones } });
+        const stop = () => send({ name: "stop", args: {} });
+        setState({ status: "connected", welcome: message, command, stop });
         expectTelemetryWithin(message.config.telemetry_timeout_ms);
         inputTimer = setInterval(sendInput, 1000 / message.config.input_hz);
       } else if (message.type === "telemetry") {

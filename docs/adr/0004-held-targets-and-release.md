@@ -13,6 +13,14 @@ Issue #20 makes one finger drag one drone. [Message format v1](../../protocol/RE
 - **A new operator starts locked.** When the operator disconnects, the bridge drops every hold. The next operator must send an input with an empty held list before a hold applies. Control then never resumes on its own after a reconnect.
 - **The tablet checks the zone as a square.** The tablet's restricted-zone check (`web/src/zone.ts`) handles a square. If `config.course.restricted_zone` is not square, the tablet checks the smallest square that covers it, so it never sends a target the bridge would reject.
 
+## Amendment, 2026-11-12: stop drops every hold
+
+Issue #36 adds the `stop` command, as ADR 0007 decides. Stop drops every hold, as stale input and a new operator do.
+
+- **Stop drops every hold and locks.** When the bridge receives a valid `stop`, it drops every hold before it calls `DroneConnection.stop()`. The next held entry applies only after an input with an empty held list. A finger still on the screen after stop, land, and takeoff then can't pull the drone again.
+- **A refused stop still drops the holds.** If the drone connection refuses stop, the drones keep flying to their last targets, as with stale input. The operator must lift every finger before a hold applies again.
+- **Both roles send stop.** The operator and the experimenter can both send it, as with takeoff and land (ADR 0003). protocol/README.md still calls the owner of stop open.
+
 ## Consequences
 
 - A lifted finger and stale input end in different targets. The trial recorder needs to know which one happened, once it exists.
