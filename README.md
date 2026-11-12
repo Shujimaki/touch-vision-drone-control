@@ -5,8 +5,8 @@ The application combines touch positioning, hand gestures for altitude control, 
 
 ## Current status
 
-The project is in planning. This repository contains documentation but no application code, dependency definitions, lockfiles, or automated tests.
-There is no runnable application yet. The repository contains no hardware compatibility or flight-performance test results.
+The project is in development. The tablet web app is a mockup that connects to the Python command bridge and shows the connection state. The bridge answers `hello` with `welcome` and checks the connection rules of [message format v1](protocol/README.md). The drone connection and its mock have a contract test suite. Nothing flies yet: there is no telemetry, input, or command handling.
+The repository contains no hardware compatibility or flight-performance test results.
 
 This README describes the planned software architecture, setup needs, dependencies, development steps, and tests.
 [CONTEXT.md](CONTEXT.md) defines the thesis requirements, accepted decisions, evaluation method, and glossary.
@@ -41,7 +41,30 @@ The front camera reads the hand. Motion capture measures drone positions. The se
 
 ## Setup and usage
 
-Installation and launch commands are not available yet. Setup instructions will follow the first runnable build and dependency definitions.
+### Run the bridge and the tablet web app
+
+The bridge needs [uv](https://docs.astral.sh/uv/). `pyproject.toml` and `uv.lock` pin its dependencies for development and tests. The install path on the flight host is still open ([ADR 0001](docs/adr/0001-bridge-inside-ros2-package.md)). From the repository root, start the bridge:
+
+```bash
+uv run python -m touch_vision_drone_control.backend_server
+```
+
+It listens on `127.0.0.1:8765`. In a second terminal, start the tablet web app as [web/README.md](web/README.md#run-it) describes. Vite forwards `/ws` to the bridge, so the page and the socket share one origin.
+
+The laptop browser works over plain HTTP. The tablet needs HTTPS for the camera and a trusted secure WebSocket. Vite serves HTTPS when it finds a certificate in the ignored `.local/certs/` folder. From the repository root, with [mkcert](https://github.com/FiloSottile/mkcert) installed, run:
+
+```bash
+mkcert -install
+```
+
+```bash
+mkdir -p .local/certs && mkcert -cert-file .local/certs/dev.pem -key-file .local/certs/dev-key.pem localhost 127.0.0.1 <laptop-ip>
+```
+
+Replace `<laptop-ip>` with the laptop's address on the team's router. Installing the mkcert root certificate on the Galaxy Tab S9 is not documented or tested yet.
+
+### Planned environments
+
 The planned environments have these roles:
 
 | Environment | Purpose and setup needs |
@@ -161,17 +184,19 @@ Identify the equipment in each calibration record. Setup commands will follow ap
 
 ## Testing
 
-Only the drone connection has tests so far (see below). The implementation needs three levels of checks:
+Only the drone connection and the bridge's WebSocket server have tests so far (see below). The implementation needs three levels of checks:
 
 - Use the mock connection to check command fields, limits, input state, and trial records against the [control requirements](CONTEXT.md#required-interactions-and-control-behavior).
 - Use the physical tablet to check camera access, three touch contacts, gestures, and video together.
 - Use equipped drones and motion capture to measure flight stability, stopping distance, radio behavior, and physical response latency.
 
-The Python command bridge has its first tests in `test/`. They need no ROS 2 install. From the repository root, run:
+The Python command bridge has its tests in `test/`. They need no ROS 2 install. `pyproject.toml` and `uv.lock` pin the bridge's dependencies, and `setup.py` stays the ROS 2 build. From the repository root, run:
 
 ```bash
-uv run --no-project --python 3.12 --with pytest pytest
+uv run pytest
 ```
+
+`test/test_ws_server.py` opens a real WebSocket to `/ws` through pytest-aiohttp and builds its messages from the [example messages](protocol/examples/).
 
 `test/test_drone_connection_contract.py` is the contract suite for drone connections. It runs against the mock drone connection now. The hardware team adds a harness for the Crazyswarm2 drone connection to its `HARNESSES` list, and the same tests then run against the real swarm.
 

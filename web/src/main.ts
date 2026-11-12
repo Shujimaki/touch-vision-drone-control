@@ -1,6 +1,8 @@
 // Mockup of the tablet interface. Components draw the fixed sample data into index.html, and the UI responds to the
 // operator: drag drones on the map, pick the video, switch tabs and theme, filter the log. This file keeps only what
-// The UI uses sample data for flight, sensors and trials. MediaPipe recognizes gestures locally; no flight commands or network messages are sent.
+// the operator changes on screen. Flight, sensors and trials use sample data. MediaPipe recognizes gestures locally,
+// but no gesture messages are sent yet. The page connects to the Python command bridge on /ws and shows the
+// connection state. The drones still come from the sample data.
 import "./styles.css";
 import { COURSE, SAMPLE, sampleDrones, sampleLog, type Gesture, type TrialRecord } from "./sample";
 import { PAL, type Pal } from "./theme";
@@ -13,6 +15,7 @@ import { altitudeCard, dronesTable, healthTable, logView, trialCard } from "./co
 import { gestureStatus, heldAltitude } from "./components/panel";
 import { dragTarget } from "./zone";
 import { glideStep } from "./glide";
+import { connect, type ConnectionState } from "./connection";
 import { startGestureClient, type GestureClient } from "./gestureClient";
 import { GestureController, type GestureControlState } from "./gestureControl";
 import { FpsMeter } from "./fpsMeter";
@@ -398,3 +401,11 @@ addEventListener("resize", layout);
 new ResizeObserver(() => requestAnimationFrame(renderAll)).observe(byId("mapbody"));
 syncSettings();
 layout();
+
+const LINK_LABEL: Record<ConnectionState["status"], string> = { connecting: "Connecting", connected: "Connected", disconnected: "No bridge" };
+connect({
+  tabletClockMs: () => performance.now(),
+  client: "tablet-web 0.1.0",
+  userAgent: navigator.userAgent,
+  onState: ({ status }) => { const el = byId("linkState"); el.dataset["state"] = status; el.textContent = LINK_LABEL[status]; },
+});
