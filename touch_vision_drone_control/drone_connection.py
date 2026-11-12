@@ -101,8 +101,10 @@ class DroneReport:
     """What the drone connection knows about one drone.
 
     Readings arrive by two routes and go stale separately:
-    - `position` comes from the motion capture machine. `position_measured_at`
-      is when it was measured.
+    - `position` comes from the motion capture machine or from the onboard
+      estimate, as the host configuration decides. `position_measured_at` is
+      when the motion capture machine measured it, or when the onboard
+      estimate arrived at the flight host.
     - `ranges`, `battery_v`, and `defensive_hover` come from the drone over the
       radio. `radio_measured_at` is when they were measured.
     """
