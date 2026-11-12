@@ -11,6 +11,14 @@ The drone connection (`touch_vision_drone_control/drone_connection.py`) follows 
 - **Defensive hover follows the straight line.** A drone heads along the straight line to its latest target. During defensive hover it holds only while that line points at the obstacle, so a new target that pulls it away moves it again.
 - **Two measurement times per drone report, on the flight host clock.** Position comes from the motion capture machine and carries `position_measured_at`. Ranges, battery voltage, and the defensive-hover flag come over the radio and share `radio_measured_at`. The two can go stale separately.
 
+## Amendment, 2026-11-12: a second position source
+
+ADR 0007 flies one drone on its Flow deck estimate, without motion capture. Position then comes from the drone over the radio, in the takeoff frame.
+
+- `DroneReport` keeps both measurement times. The two routes may be the same radio link, but the fields stay separate.
+- With the onboard estimate, the Crazyswarm2 drone connection sets `position_measured_at` to when the estimate arrived at the flight host.
+- The host configuration decides the position source. The `DroneReport` docstring must say that position comes from the motion capture machine or from the onboard estimate.
+
 ## Consequences
 
 - The stop rule settles, for the drone connection, part of what protocol/README.md still calls open ("Its effect and owner are open"). The protocol and the takeoff, landing, and stop items in CONTEXT.md need an update once both teams agree.
