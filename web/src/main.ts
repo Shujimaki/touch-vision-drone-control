@@ -15,6 +15,7 @@ import { dragTarget } from "./zone";
 import { glideStep } from "./glide";
 import { startGestureClient, type GestureClient } from "./gestureClient";
 import { GestureController, type GestureControlState } from "./gestureControl";
+import { FpsMeter } from "./fpsMeter";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -41,6 +42,7 @@ const ui = {
   liveControl: null as GestureControlState | null,
 };
 const log = sampleLog();
+const gestureFps = new FpsMeter(); // measures gesture results per second
 const trials: TrialRecord[] = [{ id: SAMPLE.trial.id, session: SAMPLE.trial.session, t0: SAMPLE.trial.t0, t1: null, outcome: null, dh: 0, restrict: 0 }];
 let K: Pal = PAL.dark, view: View = fitView(600, 600, COURSE.arena);
 const course = () => ({ ...COURSE, z: { ...COURSE.z, min: ui.settings.zmin, max: ui.settings.zmax } });
@@ -290,6 +292,7 @@ async function toggleCamera(): Promise<void> {
   if (ui.camera) {
     ui.gestureController?.reset();
     ui.gestureController = null;
+    gestureFps.reset();
     ui.liveControl = null;
     renderSoon();
 
@@ -329,6 +332,11 @@ async function toggleCamera(): Promise<void> {
     ui.gestureClient = startGestureClient({
       video,
       onResult: (result, tMs) => {
+        const now = performance.now();
+        const fps = gestureFps.tick(now);
+        const frameMs = now - tMs; // time from sending the frame to getting its result
+        cameraNote(`${fps} FPS · ${frameMs.toFixed(0)} ms per frame`);
+
         const control = ui.gestureController!.update(result, tMs);
           ui.liveControl = control;
           renderSoon();
