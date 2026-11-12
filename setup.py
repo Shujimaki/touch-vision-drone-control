@@ -1,9 +1,10 @@
-# Fix colcon ast.literal_eval bug with packaging SpecifierSet on Ubuntu 24.04
+# colcon reads setup() metadata with ast.literal_eval, which cannot parse SpecifierSet's repr.
+# setuptools 68 (Ubuntu 24.04) builds python_requires with its vendored packaging.
 try:
-    from packaging.specifiers import SpecifierSet
-    SpecifierSet.__repr__ = lambda self: repr(str(self))
+    from setuptools.extern.packaging.specifiers import SpecifierSet
 except ImportError:
-    pass
+    from packaging.specifiers import SpecifierSet
+SpecifierSet.__repr__ = lambda self: repr(str(self))
 
 from setuptools import find_packages, setup
 
