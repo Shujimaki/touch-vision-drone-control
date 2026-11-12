@@ -26,6 +26,10 @@ _Avoid_: Driver, adapter, backend
 The three Crazyflie drones flown in a trial, each with its own radio address.
 _Avoid_: Fleet, team (for the drones)
 
+**Flow deck**:
+The Bitcraze Flow deck v2 mounted under each Crazyflie. It measures height and motion over the floor, so the drone can estimate its own position without motion capture.
+_Avoid_: Flow sensor, bottom deck
+
 **Motion capture machine**:
 A separate computer that runs the lab's motion capture software and publishes measured drone positions to the flight host.
 _Avoid_: Mocap server, tracking host
@@ -35,6 +39,14 @@ _Avoid_: Mocap server, tracking host
 **Map frame**:
 The frame for drone positions in the Python command bridge and on the tablet map: x and y on the floor, z up, in meters. Motion capture positions are converted into it. Its origin and rotation relative to the lab are not measured yet.
 _Avoid_: Motion capture frame (for converted positions)
+
+**Takeoff frame**:
+The frame for drone positions when the drone flies on its own Flow deck estimate, without motion capture. It has x and y on the floor and z up, in meters. Its origin is the spot where the drone took off. It is not tied to the room, so the course does not apply in it.
+_Avoid_: Local frame, body frame, odometry frame
+
+**Flight test page**:
+A second page of the tablet web app for flying one drone in the takeoff frame. It shows one drone circle that starts at the center and follows one finger, plus takeoff, land, and stop buttons. It is for test flights, not trials.
+_Avoid_: Joystick page, debug page, drag page
 
 **Target marker**:
 The map symbol for where a drone is heading: the target the Python command bridge holds for it. It differs from the [drone entity](CONTEXT.md#shared-glossary), which shows the measured position.

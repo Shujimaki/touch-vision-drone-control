@@ -5,7 +5,7 @@ The application combines touch positioning, hand gestures for altitude control, 
 
 ## Current status
 
-The project is in development. The tablet web app is a mockup that connects to the Python command bridge and shows the connection state. It draws each drone entity at its measured position from telemetry. The bridge answers `hello` with `welcome`, checks the connection rules of [message format v1](protocol/README.md), and sends `telemetry` from the mock drone connection at 30 Hz. The tablet's Take off and Land buttons send `command`, and the bridge takes off or lands the mock drones and answers with `reply`. The tablet shows each drone's flight state from telemetry. The drone connection and its mock have a contract test suite. One finger can hold a flying drone and drag it. The tablet sends `input` at 30 Hz with the target that passed the restricted-zone check. The bridge streams setpoints to every flying mock drone at 20 Hz or more, with or without input. The altitude channel is a stub that always reports `idle`. The bridge can serve the built tablet web app and `/ws` from one HTTPS origin for the tablet. That path has not been tested on the Tab S9 yet.
+The project is in development. The tablet web app is a mockup that connects to the Python command bridge and shows the connection state. It draws each drone entity at its measured position from telemetry. The bridge answers `hello` with `welcome`, checks the connection rules of [message format v1](protocol/README.md), and sends `telemetry` from the mock drone connection at 30 Hz. The tablet's Take off and Land buttons send `command`, and the bridge takes off or lands the mock drones and answers with `reply`. The tablet shows each drone's flight state from telemetry. The drone connection and its mock have a contract test suite. One finger can hold a flying drone and drag it. The tablet sends `input` at 30 Hz with the target that passed the restricted-zone check. The bridge streams setpoints to every flying mock drone at 20 Hz or more, with or without input. The altitude channel is a stub that always reports `idle`. The bridge can serve the built tablet web app and `/ws` from one HTTPS origin for the tablet. That path has not been tested on the Tab S9 yet. Startup options pick the drone connection and the host configuration, including a takeoff configuration for one drone in a 1 m box. Only the mock drone connection exists so far.
 The repository contains no hardware compatibility or flight-performance test results.
 
 This README describes the planned software architecture, setup needs, dependencies, development steps, and tests.
@@ -49,7 +49,12 @@ The bridge needs [uv](https://docs.astral.sh/uv/). `pyproject.toml` and `uv.lock
 uv run python -m touch_vision_drone_control.backend_server
 ```
 
-It listens on `127.0.0.1:8765`. In a second terminal, start the tablet web app as [web/README.md](web/README.md#run-it) describes. Vite forwards `/ws` to the bridge, so the page and the socket share one origin.
+It listens on `127.0.0.1:8765`. Two options choose what the bridge drives:
+
+- `--drones mock|crazyswarm2` picks the drone connection. The default is `mock`. The Crazyswarm2 drone connection does not exist yet, so `crazyswarm2` stops the bridge with an error.
+- `--config course|takeoff` picks the host configuration. The default is `course`, the placeholder course. `takeoff` is one drone, cf1, in a 1 m by 1 m box around its takeoff spot ([ADR 0007](docs/adr/0007-fly-one-drone-without-motive.md)).
+
+In a second terminal, start the tablet web app as [web/README.md](web/README.md#run-it) describes. Vite forwards `/ws` to the bridge, so the page and the socket share one origin.
 
 The laptop browser works over plain HTTP. The tablet needs HTTPS for the camera and a trusted secure WebSocket. Vite serves HTTPS when it finds a certificate in the ignored `.local/certs/` folder. From the repository root, with [mkcert](https://github.com/FiloSottile/mkcert) installed, run:
 
@@ -201,7 +206,7 @@ Identify the equipment in each calibration record. Setup commands will follow ap
 
 ## Testing
 
-Only the drone connection, the bridge's WebSocket server, and the bridge's page serving have tests so far (see below). The implementation needs three levels of checks:
+Only the drone connection, the bridge's startup, the bridge's WebSocket server, and the bridge's page serving have tests so far (see below). The implementation needs three levels of checks:
 
 - Use the mock connection to check command fields, limits, input state, and trial records against the [control requirements](CONTEXT.md#required-interactions-and-control-behavior).
 - Use the physical tablet to check camera access, three touch contacts, gestures, and video together.
@@ -213,7 +218,7 @@ The Python command bridge has its tests in `test/`. They need no ROS 2 install. 
 uv run pytest
 ```
 
-`test/test_tablet_web_app.py` checks that the bridge serves the built tablet web app beside `/ws`. `test/test_ws_server.py` opens a real WebSocket to `/ws` through pytest-aiohttp and builds its messages from the [example messages](protocol/examples/).
+`test/test_backend_server.py` checks the startup options and the host configurations they pick. `test/test_no_ros_imports.py` checks that the bridge modules and the mock startup path import without ROS 2. `test/test_tablet_web_app.py` checks that the bridge serves the built tablet web app beside `/ws`. `test/test_ws_server.py` opens a real WebSocket to `/ws` through pytest-aiohttp and builds its messages from the [example messages](protocol/examples/).
 
 `test/test_drone_connection_contract.py` is the contract suite for drone connections. It runs against the mock drone connection now. The hardware team adds a harness for the Crazyswarm2 drone connection to its `HARNESSES` list, and the same tests then run against the real swarm.
 

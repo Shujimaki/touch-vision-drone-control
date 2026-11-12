@@ -28,3 +28,20 @@ PLACEHOLDER_CONFIG = HostConfig(
         pads=[Pad(id="cf1", x=2.35, y=0.6), Pad(id="cf2", x=2.65, y=0.6), Pad(id="cf3", x=2.95, y=0.6)],
     ),
 )
+
+TAKEOFF_CONFIG = PLACEHOLDER_CONFIG.model_copy(
+    update={
+        "id": "takeoff-draft-0.1",
+        "drones": ["cf1"],
+        "z_max": 1.0,
+        "course": Course(
+            room=Rect(x_min=-0.6, x_max=0.6, y_min=-0.6, y_max=0.6),
+            capture_volume=Rect(x_min=-0.5, x_max=0.5, y_min=-0.5, y_max=0.5),
+            restricted_zone=Rect(x_min=0.52, x_max=0.58, y_min=0.52, y_max=0.58),
+            obstacles=[],
+            hoops=[],
+            pads=[Pad(id="cf1", x=0.0, y=0.0)],
+        ),
+    }
+)
+"""One drone in a 1 m by 1 m box around its takeoff spot, in the takeoff frame (ADR 0007)."""

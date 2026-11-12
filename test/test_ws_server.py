@@ -9,6 +9,7 @@ from aiohttp import ClientWSTimeout, WSMsgType
 
 from protocol_examples import example
 
+from touch_vision_drone_control.backend_server import build_bridge
 from touch_vision_drone_control.drone_connection import (
     DefensiveHover,
     DroneReport,
@@ -40,15 +41,19 @@ def clock() -> FakeClock:
     return FakeClock()
 
 
-@pytest.fixture
-async def connect(aiohttp_client, clock):
-    drones = MockDroneConnection(TEST_CONFIG.drones, clock=clock, start={"cf7": Position(1.5, 2.0, 0.0)})
-    client = await aiohttp_client(create_app(TEST_CONFIG, drones, session="s-test", clock=clock))
+async def socket_opener(aiohttp_client, clock, config, drones):
+    client = await aiohttp_client(create_app(config, drones, session="s-test", clock=clock))
 
     async def open_socket():
         return await client.ws_connect("/ws", timeout=ClientWSTimeout(ws_receive=2))
 
     return open_socket
+
+
+@pytest.fixture
+async def connect(aiohttp_client, clock):
+    drones = MockDroneConnection(TEST_CONFIG.drones, clock=clock, start={"cf7": Position(1.5, 2.0, 0.0)})
+    return await socket_opener(aiohttp_client, clock, TEST_CONFIG, drones)
 
 
 async def say_hello(ws, role: str = "operator") -> dict:
@@ -622,8 +627,8 @@ async def acked_drone(ws, clock, seq: int) -> dict:
             return telemetry["drones"][0]
 
 
-async def take_off(ws, clock) -> None:
-    await ws.send_json(command("takeoff", 2, ["cf7"]))
+async def take_off(ws, clock, drone: str = "cf7") -> None:
+    await ws.send_json(command("takeoff", 2, [drone]))
     await receive_reply(ws)
     clock.s += 1.0
     await telemetry_until(ws, clock, "flying")
@@ -634,8 +639,8 @@ async def acked_after(ws, clock, message: dict) -> dict:
     return await acked_drone(ws, clock, message["seq"])
 
 
-async def fly_and_unlock(ws, clock) -> None:
-    await take_off(ws, clock)
+async def fly_and_unlock(ws, clock, drone: str = "cf7") -> None:
+    await take_off(ws, clock, drone)
     await ws.send_json(empty_input(3))
     await acked_drone(ws, clock, 3)
 
@@ -842,3 +847,32 @@ async def test_the_next_operator_must_send_an_empty_held_list_after_the_first_di
     held = await acked_after(second, clock, held_input(2, 1.5, 3.0))
 
     assert held["held"] is False
+
+
+@pytest.fixture
+async def connect_takeoff(aiohttp_client, clock):
+    return await socket_opener(aiohttp_client, clock, *build_bridge("mock", "takeoff", clock))
+
+
+async def test_the_takeoff_configuration_reaches_the_tablet_in_the_welcome(connect_takeoff) -> None:
+    ws = await connect_takeoff()
+
+    welcome = await say_hello(ws)
+
+    assert welcome["config"]["id"] == "takeoff-draft-0.1"
+    assert welcome["config"]["drones"] == ["cf1"]
+    assert welcome["config"]["course"]["capture_volume"] == {"x_min": -0.5, "x_max": 0.5, "y_min": -0.5, "y_max": 0.5}
+
+
+async def test_with_the_takeoff_configuration_a_held_target_outside_the_box_is_ignored(connect_takeoff, clock) -> None:
+    ws = await connect_takeoff()
+    await say_hello(ws)
+    await fly_and_unlock(ws, clock, "cf1")
+    await acked_after(ws, clock, held_input(4, 0.2, -0.3, "cf1"))
+
+    await ws.send_json(held_input(5, 0.6, 0.0, "cf1"))
+    reply = await receive_reply(ws)
+    drone = await acked_drone(ws, clock, 5)
+
+    assert (reply["ref"], reply["code"]) == (5, "invalid")
+    assert (drone["held"], drone["cmd"]) == (True, {"x": 0.2, "y": -0.3, "z": 0.5})
