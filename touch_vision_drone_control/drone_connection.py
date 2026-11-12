@@ -50,7 +50,7 @@ class LinkStatus(str, Enum):
 
 @dataclass(frozen=True)
 class Position:
-    """A point in the motion capture frame, in meters."""
+    """A point in the map frame (x, y on the floor, z up), in meters."""
 
     x: float
     y: float
