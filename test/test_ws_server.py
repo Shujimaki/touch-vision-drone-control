@@ -17,6 +17,7 @@ from touch_vision_drone_control.drone_connection import (
     LinkStatus,
     Position,
     Ranges,
+    Reply,
 )
 from touch_vision_drone_control.host_config import PLACEHOLDER_CONFIG
 from touch_vision_drone_control.mock_drone_connection import MockDroneConnection
@@ -434,7 +435,88 @@ async def test_an_experimenter_can_take_off_a_drone(connect, clock) -> None:
     assert (await telemetry_until(ws, clock, "taking_off"))["id"] == "cf7"
 
 
-@pytest.mark.parametrize("name", ["stop", "stop_reset", "set_mode", "trial_start", "trial_end"])
+async def test_stop_gets_ok_and_a_flying_drone_moves_to_stopped(connect, clock) -> None:
+    ws = await connect()
+    await say_hello(ws)
+    await take_off(ws, clock)
+
+    await ws.send_json(command("stop", 3))
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["ok"], reply["code"]) == (3, True, None)
+    assert (await telemetry_until(ws, clock, "stopped"))["z"] == 0.5
+
+
+async def test_an_experimenter_can_stop_the_drones(connect, clock) -> None:
+    ws = await connect()
+    await say_hello(ws, role="experimenter")
+    await take_off(ws, clock)
+
+    await ws.send_json(command("stop", 3))
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["ok"], reply["code"]) == (3, True, None)
+    assert (await telemetry_until(ws, clock, "stopped"))["id"] == "cf7"
+
+
+class _RefusesStop(MockDroneConnection):
+    def stop(self) -> Reply:
+        return Reply(ok=False, reason="link_lost")
+
+
+async def test_a_stop_the_drone_connection_refuses_gets_not_allowed_with_the_reason(aiohttp_client, clock) -> None:
+    drones = _RefusesStop(TEST_CONFIG.drones, clock=clock)
+    ws = await (await socket_opener(aiohttp_client, clock, TEST_CONFIG, drones))()
+    await say_hello(ws)
+
+    await ws.send_json(command("stop", 2))
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["ok"], reply["code"], reply["detail"]) == (2, False, "not_allowed", "link_lost")
+
+
+async def test_a_refused_stop_still_drops_every_hold_until_an_input_with_no_held_drone(aiohttp_client, clock) -> None:
+    drones = _RefusesStop(TEST_CONFIG.drones, clock=clock, start={"cf7": Position(1.5, 2.0, 0.0)})
+    ws = await (await socket_opener(aiohttp_client, clock, TEST_CONFIG, drones))()
+    await say_hello(ws)
+    await fly_and_unlock(ws, clock)
+    await acked_after(ws, clock, held_input(4, 1.5, 3.0))
+
+    await ws.send_json(command("stop", 5))
+    await receive_reply(ws)
+    locked = await acked_after(ws, clock, held_input(6, 1.5, 3.0))
+    await acked_after(ws, clock, empty_input(7))
+    resumed = await acked_after(ws, clock, held_input(8, 1.5, 3.0))
+
+    assert (locked["held"], locked["state"], resumed["held"]) == (False, "flying", True)
+
+
+class _CountsStops(MockDroneConnection):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.stops = 0
+
+    def stop(self) -> Reply:
+        self.stops += 1
+        return super().stop()
+
+
+@pytest.mark.parametrize("args", [{"drones": ["cf7"]}, {"extra": 1}])
+async def test_stop_with_args_gets_invalid_and_the_drone_connection_receives_nothing(
+    aiohttp_client, clock, args
+) -> None:
+    drones = _CountsStops(TEST_CONFIG.drones, clock=clock)
+    ws = await (await socket_opener(aiohttp_client, clock, TEST_CONFIG, drones))()
+    await say_hello(ws)
+
+    await ws.send_json(command("stop", 2) | {"args": args})
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["ok"], reply["code"]) == (2, False, "invalid")
+    assert drones.stops == 0
+
+
+@pytest.mark.parametrize("name", ["stop_reset", "set_mode", "trial_start", "trial_end"])
 async def test_other_commands_are_not_supported_yet(connect, name) -> None:
     ws = await connect()
     await say_hello(ws)
@@ -714,6 +796,71 @@ async def test_a_new_operator_must_send_an_empty_held_list_before_holding(connec
     resumed = await acked_after(ws, clock, held_input(6, 1.5, 3.0))
 
     assert (locked, resumed["held"]) == ([False, False], True)
+
+
+async def test_after_stop_a_held_entry_is_ignored_and_the_drone_stays_where_it_stopped(connect, clock) -> None:
+    ws = await connect()
+    await say_hello(ws)
+    await fly_and_unlock(ws, clock)
+    await acked_after(ws, clock, held_input(4, 1.5, 3.0))
+    clock.s += 0.2
+
+    await ws.send_json(command("stop", 5))
+    await receive_reply(ws)
+    stopped = await acked_after(ws, clock, held_input(6, 1.5, 3.0))
+    clock.s += 1.0
+    later = await acked_after(ws, clock, held_input(7, 1.5, 3.0))
+
+    assert (stopped["held"], stopped["state"], stopped["y"]) == (False, "stopped", 2.1)
+    assert (later["held"], later["y"], later["cmd"]["y"]) == (False, 2.1, 2.1)
+
+
+async def test_after_stop_land_is_accepted_and_the_drone_ends_grounded(connect, clock) -> None:
+    ws = await connect()
+    await say_hello(ws)
+    await take_off(ws, clock)
+    await ws.send_json(command("stop", 3))
+    await receive_reply(ws)
+
+    await ws.send_json(command("land", 4, ["cf7"]))
+    reply = await receive_reply(ws)
+    clock.s += 1.0
+
+    assert (reply["ref"], reply["ok"]) == (4, True)
+    assert (await telemetry_until(ws, clock, "grounded"))["z"] == 0.0
+
+
+async def test_after_stop_a_finger_still_down_does_not_hold_the_drone_once_it_flies_again(connect, clock) -> None:
+    ws = await connect()
+    await say_hello(ws)
+    await fly_and_unlock(ws, clock)
+    seq = 4
+
+    async def hold_until(state: str) -> dict:
+        nonlocal seq
+        while (drone := await acked_after(ws, clock, held_input(seq, 1.5, 3.0)))["state"] != state:
+            seq += 1
+            clock.s += 0.1
+        seq += 1
+        return drone
+
+    async def send(name: str, drones: list[str] | None = None) -> None:
+        nonlocal seq
+        await ws.send_json(command(name, seq, drones))
+        await receive_reply(ws)
+        seq += 1
+
+    await hold_until("flying")
+    await send("stop")
+    await send("land", ["cf7"])
+    await hold_until("grounded")
+    await send("takeoff", ["cf7"])
+    await hold_until("flying")
+    locked = await acked_after(ws, clock, held_input(seq, 1.5, 3.0))
+    await acked_after(ws, clock, empty_input(seq + 1))
+    resumed = await acked_after(ws, clock, held_input(seq + 2, 1.5, 3.0))
+
+    assert (locked["held"], resumed["held"]) == (False, True)
 
 
 class _CountsTargets(MockDroneConnection):

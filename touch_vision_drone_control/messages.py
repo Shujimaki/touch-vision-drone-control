@@ -97,6 +97,10 @@ class DronesArgs(_Strict):
         return self
 
 
+class NoArgs(_Strict):
+    pass
+
+
 TabletMessage = Annotated[Hello | Input | Event | Command, Field(discriminator="type")]
 TABLET_MESSAGE: TypeAdapter[TabletMessage] = TypeAdapter(TabletMessage)
 """Parses one tablet message from JSON text. Raises `pydantic.ValidationError` when it does not match the format."""
