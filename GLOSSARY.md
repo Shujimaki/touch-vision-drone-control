@@ -38,6 +38,16 @@ _Avoid_: Flow sensor, bottom deck
 A separate computer that runs the lab's motion capture software and publishes measured drone positions to the flight host.
 _Avoid_: Mocap server, tracking host
 
+## Flight
+
+**Stop**:
+The command that halts every airborne drone where it is. A stopped drone holds its place and accepts only land. Grounded drones are unaffected.
+_Avoid_: Emergency stop, kill, halt
+
+**Emergency cut**:
+Cutting a drone's motors at once. The drone falls, and it must be restarted before it can fly again. The Python command bridge never sends it. It is a last resort for a person at the flight host.
+_Avoid_: Stop, emergency stop, kill switch
+
 ## Map
 
 **Map frame**:
