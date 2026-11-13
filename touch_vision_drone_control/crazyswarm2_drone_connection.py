@@ -11,6 +11,7 @@ rules.
 """
 
 import math
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -33,6 +34,7 @@ SPEED_LIMIT_MPS = 0.3
 """Fastest the sent target moves toward the requested target (ADR 0007)."""
 
 STREAM_HZ = 30.0
+RESET_PARAM = "kalman.resetEstimation"
 TAKEOFF_S = 2.0
 LAND_S = 2.5
 LAND_HEIGHT_M = 0.03
@@ -88,6 +90,8 @@ class Crazyswarm2Client(Protocol):
     def notify_setpoints_stop(self, drone: str) -> None: ...
     def cmd_position(self, drone: str, target: Position) -> None: ...
     def set_param(self, drone: str, name: str, value: float) -> None: ...
+    def close(self) -> None:
+        """Stop the callbacks and disconnect. The drone connection calls this once, after its last command."""
 
 
 class _Step(Enum):
@@ -120,108 +124,138 @@ class Crazyswarm2DroneConnection(DroneConnection):
         config: HostConfig,
         *,
         clock: Callable[[], float],
-        client: Crazyswarm2Client | None = None,
+        client: Crazyswarm2Client,
     ) -> None:
-        if client is None:
-            raise Crazyswarm2StartupError("--drones crazyswarm2: the real Crazyswarm2 client is not written yet")
         self._clock = clock
         self._client = client
+        self._lock = threading.RLock()
+        self._closed = False
         self._drones = {name: _Drone() for name in config.drones}
         self._last_tick_s = clock()
         client.start(Crazyswarm2Callbacks(on_pose=self._on_pose, on_status=self._on_status, on_tick=self._on_tick))
 
     def takeoff(self, drones: list[str]) -> dict[str, Reply]:
-        replies = {}
-        for name in drones:
-            drone = self._drones[name]
-            replies[name] = self._check(drone, "takeoff")
-            if replies[name].ok:
-                self._client.set_param(name, "kalman.resetEstimation", 1)
-                self._client.set_param(name, "kalman.resetEstimation", 0)
-                drone.state = FlightState.TAKING_OFF
-                drone.phase = _Phase(_Step.SETTLING, self._clock() + RESET_SETTLE_S)
-        return replies
+        with self._lock:
+            replies = {}
+            for name in drones:
+                drone = self._drones[name]
+                replies[name] = self._check(drone, "takeoff")
+                if replies[name].ok:
+                    self._client.set_param(name, RESET_PARAM, 1)
+                    self._client.set_param(name, RESET_PARAM, 0)
+                    drone.state = FlightState.TAKING_OFF
+                    drone.phase = _Phase(_Step.SETTLING, self._clock() + RESET_SETTLE_S)
+            return replies
 
     def land(self, drones: list[str]) -> dict[str, Reply]:
-        replies = {}
-        for name in drones:
-            drone = self._drones[name]
-            replies[name] = self._check(drone, "land")
-            if replies[name].ok:
-                self._start_landing(name, drone)
-        return replies
+        with self._lock:
+            replies = {}
+            for name in drones:
+                drone = self._drones[name]
+                replies[name] = self._check(drone, "land")
+                if replies[name].ok:
+                    self._start_landing(name, drone)
+            return replies
 
     def stop(self) -> Reply:
-        for drone in self._drones.values():
+        with self._lock:
+            for drone in self._drones.values():
+                if drone.state is FlightState.GROUNDED:
+                    continue
+                if _is_settling(drone):
+                    _cancel_unsent_takeoff(drone)
+                    continue
+                hold = drone.sent if drone.sent is not None else drone.position
+                drone.state, drone.phase = FlightState.STOPPED, None
+                drone.requested = drone.sent = hold if hold.is_finite() else None
+            return Reply(ok=True)
+
+    def send_target(self, drone: str, target: Position) -> Reply:
+        with self._lock:
+            reply = self._check(self._drones[drone], "send_target")
+            if reply.ok:
+                self._drones[drone].requested = target
+            return reply
+
+    def close(self) -> dict[str, Reply]:
+        """Land every airborne drone, then close the client. Later commands are refused, and a second call does nothing.
+
+        A climbing drone gets the land even with a lost link, as the takeoff timeout would have sent it. Any other
+        drone with a lost link gets a `link_lost` reply and no land (ADR 0009).
+        """
+        with self._lock:
+            if self._closed:
+                return {}
+            self._closed = True
+        try:
+            with self._lock:
+                return self._land_before_close()
+        finally:
+            self._client.close()
+
+    def _land_before_close(self) -> dict[str, Reply]:
+        replies = {}
+        for name, drone in self._drones.items():
             if drone.state is FlightState.GROUNDED:
                 continue
             if _is_settling(drone):
                 _cancel_unsent_takeoff(drone)
-                continue
-            hold = drone.sent if drone.sent is not None else drone.position
-            drone.state, drone.phase = FlightState.STOPPED, None
-            drone.requested = drone.sent = hold if _is_finite(hold) else None
-        return Reply(ok=True)
-
-    def send_target(self, drone: str, target: Position) -> Reply:
-        reply = self._check(self._drones[drone], "send_target")
-        if reply.ok:
-            self._drones[drone].requested = target
-        return reply
-
-    def close(self) -> dict[str, Reply]:
-        """Land every airborne drone before the bridge exits.
-
-        A drone with a lost link gets a `link_lost` reply. If it is climbing, the takeoff timeout still lands it.
-        """
-        for drone in self._drones.values():
-            if _is_settling(drone):
-                _cancel_unsent_takeoff(drone)
-        return self.land([name for name, drone in self._drones.items() if drone.state is not FlightState.GROUNDED])
+            elif self._link(drone) is LinkStatus.LOST and not _is_climbing(drone):
+                replies[name] = Reply(ok=False, reason="link_lost")
+            else:
+                self._start_landing(name, drone)
+                replies[name] = Reply(ok=True)
+        return replies
 
     def reports(self) -> list[DroneReport]:
-        return [
-            DroneReport(
-                drone=name,
-                state=drone.state,
-                link=self._link(drone),
-                position=drone.position,
-                position_measured_at=drone.position_at,
-                ranges=NO_RANGES,
-                battery_v=drone.battery_v,
-                defensive_hover=None,
-                radio_measured_at=drone.status_at,
-            )
-            for name, drone in self._drones.items()
-        ]
+        with self._lock:
+            return [
+                DroneReport(
+                    drone=name,
+                    state=drone.state,
+                    link=self._link(drone),
+                    position=drone.position,
+                    position_measured_at=drone.position_at,
+                    ranges=NO_RANGES,
+                    battery_v=drone.battery_v,
+                    defensive_hover=None,
+                    radio_measured_at=drone.status_at,
+                )
+                for name, drone in self._drones.items()
+            ]
 
     def _link(self, drone: _Drone) -> LinkStatus:
         return LinkStatus.OK if self._clock() - drone.position_at <= LINK_TIMEOUT_S else LinkStatus.LOST
 
     def _check(self, drone: _Drone, command: _Command) -> Reply:
+        if self._closed:
+            return Reply(ok=False, reason="closed")
         if self._link(drone) is LinkStatus.LOST:
             return Reply(ok=False, reason="link_lost")
         accepted_in, reason = _ACCEPTED_IN[command]
         return Reply(ok=True) if drone.state in accepted_in else Reply(ok=False, reason=reason)
 
     def _on_pose(self, name: str, position: Position) -> None:
-        drone = self._drones[name]
-        drone.position, drone.position_at = position, self._clock()
+        with self._lock:
+            drone = self._drones[name]
+            drone.position, drone.position_at = position, self._clock()
 
     def _on_status(self, name: str, battery_v: float) -> None:
-        drone = self._drones[name]
-        drone.battery_v, drone.status_at = battery_v, self._clock()
+        with self._lock:
+            drone = self._drones[name]
+            drone.battery_v, drone.status_at = battery_v, self._clock()
 
     def _on_tick(self) -> None:
-        now = self._clock()
-        max_step = SPEED_LIMIT_MPS * (now - self._last_tick_s)
-        self._last_tick_s = now
-        for name, drone in self._drones.items():
-            if drone.phase is not None:
-                self._advance_phase(name, drone, drone.phase, now)
-            if drone.state in _STREAMING and drone.sent is not None and drone.requested is not None:
-                drone.sent = _step_toward(drone.sent, drone.requested, max_step)
-                self._client.cmd_position(name, drone.sent)
+        with self._lock:
+            now = self._clock()
+            max_step = SPEED_LIMIT_MPS * (now - self._last_tick_s)
+            self._last_tick_s = now
+            for name, drone in self._drones.items():
+                if drone.phase is not None:
+                    self._advance_phase(name, drone, drone.phase, now)
+                if drone.state in _STREAMING and drone.sent is not None and drone.requested is not None:
+                    drone.sent = _step_toward(drone.sent, drone.requested, max_step)
+                    self._client.cmd_position(name, drone.sent)
 
     def _advance_phase(self, name: str, drone: _Drone, phase: _Phase, now: float) -> None:
         match phase.step:
@@ -248,12 +282,12 @@ def _is_settling(drone: _Drone) -> bool:
     return drone.phase is not None and drone.phase.step is _Step.SETTLING
 
 
+def _is_climbing(drone: _Drone) -> bool:
+    return drone.phase is not None and drone.phase.step is _Step.CLIMBING
+
+
 def _cancel_unsent_takeoff(drone: _Drone) -> None:
     drone.state, drone.phase = FlightState.GROUNDED, None
-
-
-def _is_finite(position: Position) -> bool:
-    return all(math.isfinite(v) for v in (position.x, position.y, position.z))
 
 
 def _step_toward(here: Position, there: Position, max_step: float) -> Position:

@@ -74,6 +74,8 @@ def test_the_log_option_appends_to_an_existing_message_log(tmp_path) -> None:
     assert path.read_text() == '{"earlier": true}\n{"later": true}\n'
 
 
-def test_crazyswarm2_finds_its_drone_connection_and_asks_for_the_real_client() -> None:
-    with pytest.raises(StartupError, match="the real Crazyswarm2 client"):
+def test_crazyswarm2_without_ros2_stops_the_bridge_and_points_at_the_flight_host_venv(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "rclpy", None)
+
+    with pytest.raises(StartupError, match="cannot import rclpy. Source ROS 2"):
         build_bridge("crazyswarm2", "takeoff", FakeClock())

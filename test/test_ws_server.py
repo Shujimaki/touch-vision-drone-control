@@ -21,6 +21,7 @@ from touch_vision_drone_control.drone_connection import (
     Reply,
 )
 from touch_vision_drone_control.host_config import PLACEHOLDER_CONFIG
+from touch_vision_drone_control.messages import Pad
 from touch_vision_drone_control.mock_drone_connection import MockDroneConnection
 from touch_vision_drone_control.ws_server import create_app
 
@@ -630,8 +631,8 @@ class _Reports(MockDroneConnection):
         return self._first if time.monotonic() - self._start < _BAD_FOR_S else self._then
 
 
-async def open_with(aiohttp_client, drones, clock=lambda: 1.23456):
-    client = await aiohttp_client(create_app(TEST_CONFIG, drones, session="s-test", clock=clock))
+async def open_with(aiohttp_client, drones, clock=lambda: 1.23456, config=TEST_CONFIG):
+    client = await aiohttp_client(create_app(config, drones, session="s-test", clock=clock))
     ws = await client.ws_connect("/ws", timeout=ClientWSTimeout(ws_receive=2))
     await say_hello(ws)
     return ws
@@ -652,8 +653,66 @@ async def test_telemetry_carries_every_reading_of_a_drone_report(aiohttp_client)
     }
 
 
+async def test_a_drone_with_no_pose_yet_reports_a_null_position_and_its_pad_as_cmd(aiohttp_client) -> None:
+    no_pose = replace(
+        FULL_REPORT, state=FlightState.GROUNDED, position=Position(math.nan, math.nan, math.nan), position_measured_at=-math.inf
+    )
+    course = TEST_CONFIG.course.model_copy(update={"pads": [Pad(id="cf7", x=2.35, y=0.6)]})
+    ws = await open_with(aiohttp_client, _Reports([no_pose]), config=TEST_CONFIG.model_copy(update={"course": course}))
+
+    drone = (await receive_telemetry(ws))["drones"][0]
+
+    assert {k: drone[k] for k in ("x", "y", "z", "pos_age_ms", "cmd")} == {
+        "x": None, "y": None, "z": None, "pos_age_ms": None, "cmd": {"x": 2.35, "y": 0.6, "z": 0.0},
+    }
+
+
+@pytest.mark.parametrize(
+    ("position", "measured_at", "expected"),
+    [
+        (Position(math.nan, math.nan, math.nan), 1.2, {"x": None, "y": None, "z": None, "pos_age_ms": 34.6}),
+        (Position(1.0, 2.0, 0.5), -math.inf, {"x": 1.0, "y": 2.0, "z": 0.5, "pos_age_ms": None}),
+    ],
+    ids=["no-position", "no-measurement-time"],
+)
+async def test_a_missing_position_and_a_missing_measurement_time_each_become_null(
+    aiohttp_client, position, measured_at, expected
+) -> None:
+    report = replace(FULL_REPORT, position=position, position_measured_at=measured_at)
+    ws = await open_with(aiohttp_client, _Reports([report]))
+
+    drone = (await receive_telemetry(ws))["drones"][0]
+
+    assert {k: drone[k] for k in expected} == expected
+
+
+async def test_a_drone_with_no_pose_and_no_pad_reports_the_origin_as_cmd(aiohttp_client) -> None:
+    no_pose = replace(FULL_REPORT, state=FlightState.GROUNDED, position=Position(math.nan, math.nan, math.nan))
+    ws = await open_with(aiohttp_client, _Reports([no_pose]))
+
+    drone = (await receive_telemetry(ws))["drones"][0]
+
+    assert drone["cmd"] == {"x": 0.0, "y": 0.0, "z": 0.0}
+
+
+async def test_shutdown_closes_the_drone_connection_and_logs_a_drone_it_could_not_land(caplog) -> None:
+    closes: list[int] = []
+
+    class _Closes(MockDroneConnection):
+        def close(self):
+            closes.append(1)
+            return {"cf7": Reply(ok=False, reason="link_lost")}
+
+    app = create_app(TEST_CONFIG, _Closes(["cf7"]), session="s-test")
+    app.freeze()
+    await app.shutdown()
+
+    assert closes == [1]
+    assert "could not land cf7 as the bridge exits: link_lost" in caplog.text
+
+
 async def test_telemetry_keeps_flowing_after_a_report_it_cannot_send(aiohttp_client, caplog) -> None:
-    bad = replace(FULL_REPORT, position=Position(math.nan, 0.0, 0.0))
+    bad = replace(FULL_REPORT, battery_v=math.inf)
     ws = await open_with(aiohttp_client, _Reports([bad], [FULL_REPORT]))
 
     telemetry = await receive_telemetry(ws)

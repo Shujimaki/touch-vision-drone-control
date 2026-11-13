@@ -232,7 +232,7 @@ The host sends `telemetry` from a fixed timer. Example: [telemetry-cf3-defensive
 | `drones[].link` | `ok` or `lost` | Radio link. |
 | `drones[].x`, `.y`, `.z`, `.yaw` | m and degree, or `null` | Latest motion-capture pose. `null` before the first pose. |
 | `drones[].pos_age_ms` | number or `null` | Age of that pose. The position is stale above `config.stale_position_ms`. |
-| `drones[].cmd` | `{x, y, z}` in m | The host's current target for this drone. |
+| `drones[].cmd` | `{x, y, z}` in m | The host's current target for this drone. Before the first pose, the drone's pad from `config.course.pads` at `z` 0. |
 | `drones[].ranges` | `{front, back, left, right, up}` in m | Multi-ranger readings, relative to the drone body. |
 | `drones[].defensive_hover` | `{dir, range}` or `null` | Onboard defensive hover. `dir` is a range direction. It depends on the onboard firmware reporting a flag ([DEC-05](../CONTEXT.md#accepted-decisions-made-after-the-proposal)). |
 | `drones[].battery_v` | volt or `null` | Battery voltage. |

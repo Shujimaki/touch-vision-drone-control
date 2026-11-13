@@ -6,7 +6,8 @@ import time
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Protocol, TextIO, get_args
+from types import ModuleType
+from typing import TYPE_CHECKING, Literal, Protocol, TextIO, get_args
 
 from aiohttp import web
 
@@ -16,12 +17,16 @@ from touch_vision_drone_control.messages import HostConfig
 from touch_vision_drone_control.mock_drone_connection import MockDroneConnection
 from touch_vision_drone_control.ws_server import create_app
 
+if TYPE_CHECKING:
+    from touch_vision_drone_control.crazyswarm2_drone_connection import Crazyswarm2Client
+
 DEFAULT_PORT = 8765
 
 DroneOption = Literal["mock", "crazyswarm2"]
 ConfigOption = Literal["course", "takeoff"]
 
 CRAZYSWARM2_MODULE = "touch_vision_drone_control.crazyswarm2_drone_connection"
+CRAZYSWARM2_CLIENT_MODULE = "touch_vision_drone_control.crazyswarm2_client"
 
 _CONFIGS: dict[ConfigOption, HostConfig] = {"course": PLACEHOLDER_CONFIG, "takeoff": TAKEOFF_CONFIG}
 
@@ -31,7 +36,7 @@ class StartupError(Exception):
 
 
 class Crazyswarm2Constructor(Protocol):
-    def __call__(self, config: HostConfig, *, clock: Callable[[], float]) -> DroneConnection: ...
+    def __call__(self, config: HostConfig, *, clock: Callable[[], float], client: "Crazyswarm2Client") -> DroneConnection: ...
 
 
 def build_bridge(
@@ -47,20 +52,30 @@ def build_bridge(
 
 
 def _crazyswarm2(config: HostConfig, clock: Callable[[], float]) -> DroneConnection:
-    """Import the Crazyswarm2 drone connection only here, so the mock runs without ROS 2 (ADR 0001)."""
-    try:
-        module = importlib.import_module(CRAZYSWARM2_MODULE)
-    except ModuleNotFoundError as error:
-        if error.name != CRAZYSWARM2_MODULE:
-            raise
-        raise StartupError(
-            f"--drones crazyswarm2: the Crazyswarm2 drone connection is not available ({CRAZYSWARM2_MODULE} is missing)"
-        ) from error
+    """Import the Crazyswarm2 modules only here, so the mock runs without ROS 2 (ADR 0001)."""
+    module = _import_crazyswarm2(CRAZYSWARM2_MODULE)
+    client_module = _import_crazyswarm2(CRAZYSWARM2_CLIENT_MODULE)
     construct: Crazyswarm2Constructor = module.Crazyswarm2DroneConnection
     try:
-        return construct(config, clock=clock)
+        return construct(config, clock=clock, client=client_module.RosCrazyswarm2Client(config.drones))
     except module.Crazyswarm2StartupError as error:
         raise StartupError(str(error)) from error
+
+
+def _import_crazyswarm2(name: str) -> ModuleType:
+    try:
+        return importlib.import_module(name)
+    except ModuleNotFoundError as error:
+        if error.name == name:
+            raise StartupError(
+                f"--drones crazyswarm2: the Crazyswarm2 drone connection is not available ({name} is missing)"
+            ) from error
+        if name == CRAZYSWARM2_CLIENT_MODULE:
+            raise StartupError(
+                f"--drones crazyswarm2: cannot import {error.name}. Source ROS 2 and the Crazyswarm2 workspace, "
+                "then run the bridge from the venv in docs/adr/0008-bridge-install-path-on-the-flight-host.md"
+            ) from error
+        raise
 
 
 def open_message_log(path: Path | None) -> contextlib.AbstractContextManager[TextIO | None]:
@@ -100,14 +115,17 @@ def main() -> None:
         config, drones = build_bridge(args.drones, args.config, clock)
     except StartupError as error:
         parser.error(str(error))
-    session = datetime.now().strftime("s%Y%m%d-%H%M%S")
     try:
-        log_file = open_message_log(args.log)
-    except OSError as error:
-        parser.error(f"--log: cannot open the message log ({error})")
-    with log_file as log:
-        app = create_app(config, drones, session=session, clock=clock, web_app_dir=args.web_app, log=log)
-        web.run_app(app, host=args.host, port=args.port, ssl_context=tls)
+        session = datetime.now().strftime("s%Y%m%d-%H%M%S")
+        try:
+            log_file = open_message_log(args.log)
+        except OSError as error:
+            parser.error(f"--log: cannot open the message log ({error})")
+        with log_file as log:
+            app = create_app(config, drones, session=session, clock=clock, web_app_dir=args.web_app, log=log)
+            web.run_app(app, host=args.host, port=args.port, ssl_context=tls)
+    finally:
+        drones.close()
 
 
 if __name__ == "__main__":

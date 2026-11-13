@@ -124,6 +124,40 @@ def test_close_lands_every_airborne_drone_and_cancels_an_unsent_takeoff() -> Non
     assert {report.state for report in connection.reports()} == {FlightState.GROUNDED}
 
 
+def test_close_closes_the_client_once_after_the_land_and_a_second_close_does_nothing() -> None:
+    _, client, connection = fly()
+
+    assert connection.close() == {"cf1": Reply(ok=True)}
+    assert client.closes == 1
+    assert client.calls_to("cf1", "land")
+
+    assert connection.close() == {}
+    assert client.closes == 1
+
+
+def test_close_lands_a_climbing_drone_even_with_a_lost_link() -> None:
+    _, client, connection = build()
+    client.advance(0.1)
+    connection.takeoff(["cf1"])
+    client.advance(RESET_SETTLE_S + 0.1)
+    client.drop_telemetry("cf1")
+    client.advance(1.0)
+
+    assert connection.close() == {"cf1": Reply(ok=True)}
+    assert [call.method for call in client.calls_to("cf1", "notify_setpoints_stop", "land")] == [
+        "notify_setpoints_stop",
+        "land",
+    ]
+
+
+def test_commands_after_close_are_refused() -> None:
+    _, client, connection = build()
+    client.advance(0.1)
+    connection.close()
+
+    assert connection.takeoff(["cf1"]) == {"cf1": Reply(ok=False, reason="closed")}
+
+
 def test_every_takeoff_resets_the_estimator_and_waits_for_it_to_settle() -> None:
     _, client, connection = fly()
     connection.land(["cf1"])

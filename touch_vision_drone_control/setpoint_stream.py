@@ -1,4 +1,3 @@
-import math
 from collections.abc import Callable, Mapping
 
 from touch_vision_drone_control.drone_connection import DroneConnection, FlightState, Position, Reply
@@ -66,7 +65,7 @@ class SetpointStream:
             if report.state is not FlightState.FLYING:
                 self._targets.pop(drone, None)
                 continue
-            if not all(math.isfinite(v) for v in (position.x, position.y, position.z)):
+            if not position.is_finite():
                 continue
             target = self._targets.setdefault(drone, position)
             if drone in self._held:
