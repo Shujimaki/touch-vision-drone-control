@@ -11,7 +11,11 @@ import pytest
 from fake_clock import FakeClock
 from fake_crazyswarm2_client import FakeCrazyswarm2Client
 
-from touch_vision_drone_control.crazyswarm2_drone_connection import SPEED_LIMIT_MPS, Crazyswarm2DroneConnection
+from touch_vision_drone_control.crazyswarm2_drone_connection import (
+    SPEED_LIMIT_MPS,
+    STREAM_HZ,
+    Crazyswarm2DroneConnection,
+)
 from touch_vision_drone_control.drone_connection import (
     DroneConnection,
     DroneReport,
@@ -54,6 +58,7 @@ def fake_crazyswarm2_harness() -> Harness:
     clock = FakeClock()
     client = FakeCrazyswarm2Client(clock, TAKEOFF_CONFIG.drones)
     connection = Crazyswarm2DroneConnection(TAKEOFF_CONFIG, clock=clock, client=client)
+    client.advance(1 / STREAM_HZ)
     return Harness(
         connection=connection,
         wait=client.advance,

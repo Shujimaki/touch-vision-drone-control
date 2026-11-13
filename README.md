@@ -225,6 +225,17 @@ uv run pytest
 
 `test/test_drone_connection_contract.py` is the contract suite for drone connections. It runs against the mock drone connection and against the Crazyswarm2 drone connection with a fake Crazyswarm2 client (`test/fake_crazyswarm2_client.py`), so neither needs ROS 2. A harness for the real cf1 is planned. It will run the same tests against the real drone.
 
+`test/test_crazyswarm2_drone_connection.py` checks the [ADR 0009](docs/adr/0009-crazyswarm2-drone-connection-behavior.md) rules that the contract suite can't show:
+
+- the estimator reset before every takeoff
+- the takeoff timeout
+- link loss from pose age
+- the stream that holds a stopped drone
+- notify setpoints stop before land
+- `close()`
+
+The fake Crazyswarm2 client follows our reading of the firmware source, which the cf1 harness still has to confirm. It cuts the motors after 2 s without `cmd_position`. It ignores takeoff and land while setpoints are in control. It also logs every call with its time. The real Crazyswarm2 client doesn't exist yet, so nothing calls `close()` when the bridge exits.
+
 The [evaluation plan](CONTEXT.md#evaluation-method-and-numerical-targets) defines the study procedure, numerical targets, and scoring rules.
 Record commands, equipment, dependency versions, results, and limitations for each test run.
 
