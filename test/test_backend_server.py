@@ -72,3 +72,8 @@ def test_the_log_option_appends_to_an_existing_message_log(tmp_path) -> None:
         log.write('{"later": true}\n')
 
     assert path.read_text() == '{"earlier": true}\n{"later": true}\n'
+
+
+def test_crazyswarm2_finds_its_drone_connection_and_asks_for_the_real_client() -> None:
+    with pytest.raises(StartupError, match="the real Crazyswarm2 client"):
+        build_bridge("crazyswarm2", "takeoff", FakeClock())

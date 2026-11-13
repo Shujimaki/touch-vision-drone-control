@@ -57,7 +57,10 @@ def _crazyswarm2(config: HostConfig, clock: Callable[[], float]) -> DroneConnect
             f"--drones crazyswarm2: the Crazyswarm2 drone connection is not available ({CRAZYSWARM2_MODULE} is missing)"
         ) from error
     construct: Crazyswarm2Constructor = module.Crazyswarm2DroneConnection
-    return construct(config, clock=clock)
+    try:
+        return construct(config, clock=clock)
+    except module.Crazyswarm2StartupError as error:
+        raise StartupError(str(error)) from error
 
 
 def open_message_log(path: Path | None) -> contextlib.AbstractContextManager[TextIO | None]:

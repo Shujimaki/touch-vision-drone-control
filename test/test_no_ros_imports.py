@@ -1,10 +1,11 @@
-"""The bridge runs and tests without ROS 2. Only the Crazyswarm2 drone connection may import rclpy (ADR 0001)."""
+"""The bridge runs and tests without ROS 2. Only the real Crazyswarm2 client may import rclpy (ADR 0001)."""
 
 import subprocess
 import sys
 import textwrap
 
-ALLOWED_TO_IMPORT_RCLPY = {"touch_vision_drone_control.crazyswarm2_drone_connection"}
+ALLOWED_TO_IMPORT_RCLPY = {"touch_vision_drone_control.crazyswarm2_client"}
+CRAZYSWARM2_MODULES = ALLOWED_TO_IMPORT_RCLPY | {"touch_vision_drone_control.crazyswarm2_drone_connection"}
 
 IMPORT_ALL_WITH_RCLPY_BLOCKED = textwrap.dedent(
     f"""
@@ -38,7 +39,7 @@ START_THE_MOCK_WITH_RCLPY_BLOCKED = textwrap.dedent(
     for config in ("course", "takeoff"):
         options = option_parser().parse_args(["--config", config])
         build_bridge(options.drones, options.config, time.monotonic)
-    imported = {ALLOWED_TO_IMPORT_RCLPY!r} & sys.modules.keys()
+    imported = {CRAZYSWARM2_MODULES!r} & sys.modules.keys()
     assert not imported, imported
     """
 )

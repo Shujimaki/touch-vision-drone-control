@@ -2,8 +2,8 @@
 
 The Python command bridge talks to the swarm only through `DroneConnection`.
 The mock drone connection stands in for the swarm during development. The
-Crazyswarm2 drone connection drives the real swarm, and it is the only module
-allowed to import `rclpy` (ADR 0001).
+Crazyswarm2 drone connection drives the real swarm. Its real Crazyswarm2 client
+is the only module allowed to import `rclpy` (ADR 0001).
 
 Commands go one way: the bridge sends position targets at its fixed setpoint
 rate, plus takeoff, land, and stop. Reports come back: one `DroneReport` per
