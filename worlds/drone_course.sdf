@@ -1,0 +1,797 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+  <world name="drone_course">
+    <!-- Miguel 409 course, Figure 5 of the proposal: 531 x 355 cm motion-capture room,
+         255 cm room height, 118 cm restricted zone at the centre. Matches web/src/sample.ts COURSE
+         and CONTEXT.md's course quantities table. Units: metres. -->
+    <physics name="default_physics" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+      <ode>
+        <solver>
+          <type>quick</type>
+          <iters>50</iters>
+        </solver>
+      </ode>
+    </physics>
+    <gravity>0 0 -9.81</gravity>
+
+    <scene>
+      <ambient>0.5 0.5 0.5 1</ambient>
+      <background>0.75 0.8 0.85 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>2.65 1.78 5 0 0 0</pose>
+      <diffuse>0.85 0.85 0.85 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.3 0.2 -0.9</direction>
+    </light>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-contact-system" name="gz::sim::systems::Contact"/>
+
+    <!-- Ground plane, large enough that the 5.31 x 3.55 m room sits well inside it -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
+          <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.35 0.35 0.35 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Motion-capture room floor tile: 5.31 x 3.55 m, centred at (2.655, 1.775) -->
+    <model name="room_floor">
+      <static>true</static>
+      <pose>2.655 1.775 0.001 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>5.31 3.55 0.002</size></box></geometry>
+          <material><ambient>0.85 0.85 0.88 1</ambient><diffuse>0.9 0.9 0.92 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Room boundary: 255 cm high walls marking the 5.31 x 3.55 m room perimeter.
+         Thin, semi-transparent (glass/netting-like) walls to visually contain drones. -->
+    <model name="room_boundary">
+      <static>true</static>
+      <link name="wall_y_min">
+        <pose>2.655 0 1.275 0 0 0</pose>
+        <collision name="collision">
+          <geometry><box><size>5.31 0.02 2.55</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>5.31 0.02 2.55</size></box></geometry>
+          <material>
+            <ambient>0.6 0.8 0.95 0.25</ambient>
+            <diffuse>0.6 0.8 0.95 0.25</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="wall_y_max">
+        <pose>2.655 3.55 1.275 0 0 0</pose>
+        <collision name="collision">
+          <geometry><box><size>5.31 0.02 2.55</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>5.31 0.02 2.55</size></box></geometry>
+          <material>
+            <ambient>0.6 0.8 0.95 0.25</ambient>
+            <diffuse>0.6 0.8 0.95 0.25</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="wall_x_min">
+        <pose>0 1.775 1.275 0 0 0</pose>
+        <collision name="collision">
+          <geometry><box><size>0.02 3.55 2.55</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.02 3.55 2.55</size></box></geometry>
+          <material>
+            <ambient>0.6 0.8 0.95 0.25</ambient>
+            <diffuse>0.6 0.8 0.95 0.25</diffuse>
+          </material>
+        </visual>
+      </link>
+      <link name="wall_x_max">
+        <pose>5.31 1.775 1.275 0 0 0</pose>
+        <collision name="collision">
+          <geometry><box><size>0.02 3.55 2.55</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.02 3.55 2.55</size></box></geometry>
+          <material>
+            <ambient>0.6 0.8 0.95 0.25</ambient>
+            <diffuse>0.6 0.8 0.95 0.25</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- web/src/sample.ts COURSE: restrictedZone, centered at (2.655, 1.775),
+         1.18 x 1.18 m footprint (half-size 0.59), enforced 0.0 to 1.44 m tall.
+         Visual-only (no collision) since this is a logical no-fly zone, not a
+         physical obstacle. -->
+    <model name="restricted_zone">
+      <static>true</static>
+      <link name="link">
+        <visual name="visual">
+          <pose>2.655 1.775 0.72 0 0 0</pose>
+          <geometry><box><size>1.18 1.18 1.44</size></box></geometry>
+          <material>
+            <ambient>0.9 0.1 0.3 0.2</ambient>
+            <diffuse>0.9 0.1 0.3 0.2</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- web/src/sample.ts COURSE: obstacles O1, footprint 0.53 x 0.51 m
+         centered at (1.31, 1.56), height 1.02 m, resting on the floor so
+         pose z = 1.02 / 2 = 0.51. -->
+    <model name="obstacle_O1">
+      <static>true</static>
+      <link name="link">
+        <pose>1.31 1.56 0.51 0 0 0</pose>
+        <collision name="collision">
+          <geometry><box><size>0.53 0.51 1.02</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.53 0.51 1.02</size></box></geometry>
+          <material>
+            <ambient>0.85 0.45 0.1 1</ambient>
+            <diffuse>0.85 0.45 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- web/src/sample.ts COURSE: obstacles O2, footprint 0.53 x 0.51 m
+         centered at (2.60, 2.71), height 1.53 m, pose z = 1.53 / 2 = 0.765. -->
+    <model name="obstacle_O2">
+      <static>true</static>
+      <link name="link">
+        <pose>2.60 2.71 0.765 0 0 0</pose>
+        <collision name="collision">
+          <geometry><box><size>0.53 0.51 1.53</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.53 0.51 1.53</size></box></geometry>
+          <material>
+            <ambient>0.85 0.45 0.1 1</ambient>
+            <diffuse>0.85 0.45 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- web/src/sample.ts COURSE: hoops H1, 0.40 m diameter horizontal hoop
+         (drone climbs up through it) centered at (1.31, 2.70), height 1.00 m.
+         Ring approximated with 16 box segments of radius 0.20 m in the local
+         XY plane. Visual-only, no collision. -->
+    <model name="hoop_H1">
+      <static>true</static>
+      <pose>1.31 2.70 1.00 0 0 0</pose>
+      <link name="link">
+        <visual name="segment_0">
+          <pose>0.2000 0.0000 0 0 0 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_1">
+          <pose>0.1848 0.0765 0 0 0 1.9635</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_2">
+          <pose>0.1414 0.1414 0 0 0 2.3562</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_3">
+          <pose>0.0765 0.1848 0 0 0 2.7489</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_4">
+          <pose>0.0000 0.2000 0 0 0 3.1416</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_5">
+          <pose>-0.0765 0.1848 0 0 0 3.5343</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_6">
+          <pose>-0.1414 0.1414 0 0 0 3.9270</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_7">
+          <pose>-0.1848 0.0765 0 0 0 4.3197</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_8">
+          <pose>-0.2000 0.0000 0 0 0 4.7124</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_9">
+          <pose>-0.1848 -0.0765 0 0 0 5.1051</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_10">
+          <pose>-0.1414 -0.1414 0 0 0 5.4978</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_11">
+          <pose>-0.0765 -0.1848 0 0 0 5.8905</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_12">
+          <pose>0.0000 -0.2000 0 0 0 6.2832</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_13">
+          <pose>0.0765 -0.1848 0 0 0 0.3927</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_14">
+          <pose>0.1414 -0.1414 0 0 0 0.7854</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_15">
+          <pose>0.1848 -0.0765 0 0 0 1.1781</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- web/src/sample.ts COURSE: hoops H2, 0.40 m diameter vertical hoop
+         (ring stands upright, axis horizontal) centered at (3.99, 2.70),
+         height 0.50 m, yaw 90 deg. Ring approximated with 16 box segments
+         of radius 0.20 m in the local YZ plane. Visual-only, no collision. -->
+    <model name="hoop_H2">
+      <static>true</static>
+      <pose>3.99 2.70 0.50 0 0 1.5708</pose>
+      <link name="link">
+        <visual name="segment_0">
+          <pose>0 0.2000 0.0000 0 -1.5708 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_1">
+          <pose>0 0.1848 0.0765 0 -1.9635 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_2">
+          <pose>0 0.1414 0.1414 0 -2.3562 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_3">
+          <pose>0 0.0765 0.1848 0 -2.7489 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_4">
+          <pose>0 0.0000 0.2000 0 -3.1416 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_5">
+          <pose>0 -0.0765 0.1848 0 -3.5343 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_6">
+          <pose>0 -0.1414 0.1414 0 -3.9270 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_7">
+          <pose>0 -0.1848 0.0765 0 -4.3197 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_8">
+          <pose>0 -0.2000 0.0000 0 -4.7124 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_9">
+          <pose>0 -0.1848 -0.0765 0 -5.1051 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_10">
+          <pose>0 -0.1414 -0.1414 0 -5.4978 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_11">
+          <pose>0 -0.0765 -0.1848 0 -5.8905 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_12">
+          <pose>0 0.0000 -0.2000 0 -6.2832 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_13">
+          <pose>0 0.0765 -0.1848 0 -0.3927 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_14">
+          <pose>0 0.1414 -0.1414 0 -0.7854 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_15">
+          <pose>0 0.1848 -0.0765 0 -1.1781 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- web/src/sample.ts COURSE: hoops H3, 0.40 m diameter vertical hoop
+         (ring stands upright, axis horizontal) centered at (3.99, 1.49),
+         height 1.50 m, yaw 90 deg. Same ring construction as H2.
+         Visual-only, no collision. -->
+    <model name="hoop_H3">
+      <static>true</static>
+      <pose>3.99 1.49 1.50 0 0 1.5708</pose>
+      <link name="link">
+        <visual name="segment_0">
+          <pose>0 0.2000 0.0000 0 -1.5708 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_1">
+          <pose>0 0.1848 0.0765 0 -1.9635 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_2">
+          <pose>0 0.1414 0.1414 0 -2.3562 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_3">
+          <pose>0 0.0765 0.1848 0 -2.7489 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_4">
+          <pose>0 0.0000 0.2000 0 -3.1416 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_5">
+          <pose>0 -0.0765 0.1848 0 -3.5343 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_6">
+          <pose>0 -0.1414 0.1414 0 -3.9270 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_7">
+          <pose>0 -0.1848 0.0765 0 -4.3197 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_8">
+          <pose>0 -0.2000 0.0000 0 -4.7124 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_9">
+          <pose>0 -0.1848 -0.0765 0 -5.1051 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_10">
+          <pose>0 -0.1414 -0.1414 0 -5.4978 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_11">
+          <pose>0 -0.0765 -0.1848 0 -5.8905 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_12">
+          <pose>0 0.0000 -0.2000 0 -6.2832 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_13">
+          <pose>0 0.0765 -0.1848 0 -0.3927 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_14">
+          <pose>0 0.1414 -0.1414 0 -0.7854 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="segment_15">
+          <pose>0 0.1848 -0.0765 0 -1.1781 1.5708</pose>
+          <geometry><box><size>0.08 0.02 0.02</size></box></geometry>
+          <material><ambient>0.1 0.9 0.9 1</ambient><diffuse>0.1 0.9 0.9 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Drone start pad for cf1, from protocol/examples/welcome.json
+         config.course.pads (30 cm center-to-center spacing per CONTEXT.md).
+         Flat disc marker resting on the floor, visual-only. -->
+    <model name="pad_cf1">
+      <static>true</static>
+      <pose>2.35 0.6 0.0025 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><cylinder><radius>0.08</radius><length>0.005</length></cylinder></geometry>
+          <material>
+            <ambient>0.1 0.85 0.2 1</ambient>
+            <diffuse>0.1 0.85 0.2 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Drone start pad for cf2, from protocol/examples/welcome.json
+         config.course.pads (30 cm center-to-center spacing per CONTEXT.md).
+         Flat disc marker resting on the floor, visual-only. -->
+    <model name="pad_cf2">
+      <static>true</static>
+      <pose>2.65 0.6 0.0025 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><cylinder><radius>0.08</radius><length>0.005</length></cylinder></geometry>
+          <material>
+            <ambient>0.85 0.8 0.1 1</ambient>
+            <diffuse>0.85 0.8 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Drone start pad for cf3, from protocol/examples/welcome.json
+         config.course.pads (30 cm center-to-center spacing per CONTEXT.md).
+         Flat disc marker resting on the floor, visual-only. -->
+    <model name="pad_cf3">
+      <static>true</static>
+      <pose>2.95 0.6 0.0025 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><cylinder><radius>0.08</radius><length>0.005</length></cylinder></geometry>
+          <material>
+            <ambient>0.9 0.3 0.1 1</ambient>
+            <diffuse>0.9 0.3 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Dynamic drone cf1: illustrative Crazyflie-style quadrotor, scaled up
+         to a ~16 cm motor-to-motor diagonal for visibility. Hovering 0.05 m
+         above pad_cf1 (x=2.35, y=0.6 from protocol/examples/welcome.json). -->
+    <model name="cf1">
+      <static>false</static>
+      <pose>2.35 0.6 0.08 0 0 0</pose>
+      <link name="base_link">
+        <inertial>
+          <mass>0.05</mass>
+          <inertia>
+            <ixx>2e-5</ixx>
+            <iyy>2e-5</iyy>
+            <izz>3e-5</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="body_collision">
+          <geometry><box><size>0.09 0.09 0.02</size></box></geometry>
+        </collision>
+        <visual name="body_visual">
+          <geometry><box><size>0.09 0.09 0.02</size></box></geometry>
+          <material>
+            <ambient>0.15 0.15 0.15 1</ambient>
+            <diffuse>0.15 0.15 0.15 1</diffuse>
+          </material>
+        </visual>
+        <visual name="arm_ne">
+          <pose>0.04 0.04 0 0 0 0.7854</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="arm_nw">
+          <pose>-0.04 0.04 0 0 0 2.3562</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="arm_sw">
+          <pose>-0.04 -0.04 0 0 0 3.9270</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="arm_se">
+          <pose>0.04 -0.04 0 0 0 5.4978</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="rotor_ne">
+          <pose>0.08 0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.1 0.85 0.2 1</ambient><diffuse>0.1 0.85 0.2 1</diffuse></material>
+        </visual>
+        <visual name="rotor_nw">
+          <pose>-0.08 0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.1 0.85 0.2 1</ambient><diffuse>0.1 0.85 0.2 1</diffuse></material>
+        </visual>
+        <visual name="rotor_sw">
+          <pose>-0.08 -0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.1 0.85 0.2 1</ambient><diffuse>0.1 0.85 0.2 1</diffuse></material>
+        </visual>
+        <visual name="rotor_se">
+          <pose>0.08 -0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.1 0.85 0.2 1</ambient><diffuse>0.1 0.85 0.2 1</diffuse></material>
+        </visual>
+      </link>
+      <!-- Flight control stand-in for the stock Crazyflie cascaded PID (no
+           individual rotor joints on this illustrative body): VelocityControl
+           sets base_link's linear/angular velocity directly from commands on
+           /model/cf1/cmd_vel, and OdometryPublisher reports position/yaw on
+           /model/cf1/odometry as the motion-capture analogue. -->
+      <plugin filename="gz-sim-velocity-control-system" name="gz::sim::systems::VelocityControl">
+        <link_name>base_link</link_name>
+      </plugin>
+      <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher">
+        <odom_frame>cf1/odom</odom_frame>
+        <robot_base_frame>cf1/base_link</robot_base_frame>
+        <odom_topic>/model/cf1/odometry</odom_topic>
+        <odom_publish_frequency>30</odom_publish_frequency>
+        <dimensions>3</dimensions>
+      </plugin>
+    </model>
+
+    <!-- Dynamic drone cf2: illustrative Crazyflie-style quadrotor, scaled up
+         to a ~16 cm motor-to-motor diagonal for visibility. Hovering 0.05 m
+         above pad_cf2 (x=2.65, y=0.6 from protocol/examples/welcome.json). -->
+    <model name="cf2">
+      <static>false</static>
+      <pose>2.65 0.6 0.08 0 0 0</pose>
+      <link name="base_link">
+        <inertial>
+          <mass>0.05</mass>
+          <inertia>
+            <ixx>2e-5</ixx>
+            <iyy>2e-5</iyy>
+            <izz>3e-5</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="body_collision">
+          <geometry><box><size>0.09 0.09 0.02</size></box></geometry>
+        </collision>
+        <visual name="body_visual">
+          <geometry><box><size>0.09 0.09 0.02</size></box></geometry>
+          <material>
+            <ambient>0.15 0.15 0.15 1</ambient>
+            <diffuse>0.15 0.15 0.15 1</diffuse>
+          </material>
+        </visual>
+        <visual name="arm_ne">
+          <pose>0.04 0.04 0 0 0 0.7854</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="arm_nw">
+          <pose>-0.04 0.04 0 0 0 2.3562</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="arm_sw">
+          <pose>-0.04 -0.04 0 0 0 3.9270</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="arm_se">
+          <pose>0.04 -0.04 0 0 0 5.4978</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="rotor_ne">
+          <pose>0.08 0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.85 0.8 0.1 1</ambient><diffuse>0.85 0.8 0.1 1</diffuse></material>
+        </visual>
+        <visual name="rotor_nw">
+          <pose>-0.08 0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.85 0.8 0.1 1</ambient><diffuse>0.85 0.8 0.1 1</diffuse></material>
+        </visual>
+        <visual name="rotor_sw">
+          <pose>-0.08 -0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.85 0.8 0.1 1</ambient><diffuse>0.85 0.8 0.1 1</diffuse></material>
+        </visual>
+        <visual name="rotor_se">
+          <pose>0.08 -0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.85 0.8 0.1 1</ambient><diffuse>0.85 0.8 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <!-- Flight control stand-in for the stock Crazyflie cascaded PID (no
+           individual rotor joints on this illustrative body): VelocityControl
+           sets base_link's linear/angular velocity directly from commands on
+           /model/cf2/cmd_vel, and OdometryPublisher reports position/yaw on
+           /model/cf2/odometry as the motion-capture analogue. -->
+      <plugin filename="gz-sim-velocity-control-system" name="gz::sim::systems::VelocityControl">
+        <link_name>base_link</link_name>
+      </plugin>
+      <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher">
+        <odom_frame>cf2/odom</odom_frame>
+        <robot_base_frame>cf2/base_link</robot_base_frame>
+        <odom_topic>/model/cf2/odometry</odom_topic>
+        <odom_publish_frequency>30</odom_publish_frequency>
+        <dimensions>3</dimensions>
+      </plugin>
+    </model>
+
+    <!-- Dynamic drone cf3: illustrative Crazyflie-style quadrotor, scaled up
+         to a ~16 cm motor-to-motor diagonal for visibility. Hovering 0.05 m
+         above pad_cf3 (x=2.95, y=0.6 from protocol/examples/welcome.json). -->
+    <model name="cf3">
+      <static>false</static>
+      <pose>2.95 0.6 0.08 0 0 0</pose>
+      <link name="base_link">
+        <inertial>
+          <mass>0.05</mass>
+          <inertia>
+            <ixx>2e-5</ixx>
+            <iyy>2e-5</iyy>
+            <izz>3e-5</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="body_collision">
+          <geometry><box><size>0.09 0.09 0.02</size></box></geometry>
+        </collision>
+        <visual name="body_visual">
+          <geometry><box><size>0.09 0.09 0.02</size></box></geometry>
+          <material>
+            <ambient>0.15 0.15 0.15 1</ambient>
+            <diffuse>0.15 0.15 0.15 1</diffuse>
+          </material>
+        </visual>
+        <visual name="arm_ne">
+          <pose>0.04 0.04 0 0 0 0.7854</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="arm_nw">
+          <pose>-0.04 0.04 0 0 0 2.3562</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="arm_sw">
+          <pose>-0.04 -0.04 0 0 0 3.9270</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="arm_se">
+          <pose>0.04 -0.04 0 0 0 5.4978</pose>
+          <geometry><box><size>0.09 0.008 0.004</size></box></geometry>
+          <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material>
+        </visual>
+        <visual name="rotor_ne">
+          <pose>0.08 0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.9 0.3 0.1 1</ambient><diffuse>0.9 0.3 0.1 1</diffuse></material>
+        </visual>
+        <visual name="rotor_nw">
+          <pose>-0.08 0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.9 0.3 0.1 1</ambient><diffuse>0.9 0.3 0.1 1</diffuse></material>
+        </visual>
+        <visual name="rotor_sw">
+          <pose>-0.08 -0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.9 0.3 0.1 1</ambient><diffuse>0.9 0.3 0.1 1</diffuse></material>
+        </visual>
+        <visual name="rotor_se">
+          <pose>0.08 -0.08 0 0 0 0</pose>
+          <geometry><cylinder><radius>0.025</radius><length>0.002</length></cylinder></geometry>
+          <material><ambient>0.9 0.3 0.1 1</ambient><diffuse>0.9 0.3 0.1 1</diffuse></material>
+        </visual>
+      </link>
+      <!-- Flight control stand-in for the stock Crazyflie cascaded PID (no
+           individual rotor joints on this illustrative body): VelocityControl
+           sets base_link's linear/angular velocity directly from commands on
+           /model/cf3/cmd_vel, and OdometryPublisher reports position/yaw on
+           /model/cf3/odometry as the motion-capture analogue. -->
+      <plugin filename="gz-sim-velocity-control-system" name="gz::sim::systems::VelocityControl">
+        <link_name>base_link</link_name>
+      </plugin>
+      <plugin filename="gz-sim-odometry-publisher-system" name="gz::sim::systems::OdometryPublisher">
+        <odom_frame>cf3/odom</odom_frame>
+        <robot_base_frame>cf3/base_link</robot_base_frame>
+        <odom_topic>/model/cf3/odometry</odom_topic>
+        <odom_publish_frequency>30</odom_publish_frequency>
+        <dimensions>3</dimensions>
+      </plugin>
+    </model>
+  
+    <!-- Drift render-confirm: the Sensors system renders camera sensors (ogre2,
+         headless-capable) so the observer can read a frame. Added independently of
+         the other system plugins — a world often has SceneBroadcaster (pose) but no
+         Sensors (no camera), and the injected render-confirm camera needs it. -->
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <!-- Added by Drift: a fixed camera looking at the origin, so the scene can be
+         checked visually after it launches. Inert — static, no collisions, no
+         dynamics; it does not affect the simulation. Safe to delete if you do not
+         want it, though Drift will not be able to show you the running scene. -->
+    <model name="drift_scene_view">
+      <static>true</static>
+      <pose>3 0 2 0 0.34 3.14159</pose>
+      <link name="link">
+        <sensor type="camera" name="drift_scene_view_camera">
+          <topic>/drift/scene_view</topic>
+          <always_on>1</always_on>
+          <update_rate>30</update_rate>
+          <camera>
+            <horizontal_fov>1.0472</horizontal_fov>
+            <image>
+              <width>800</width>
+              <height>600</height>
+              <format>R8G8B8</format>
+            </image>
+            <clip>
+              <near>0.05</near>
+              <far>100</far>
+            </clip>
+          </camera>
+        </sensor>
+      </link>
+    </model>
+</world>
+</sdf>
