@@ -19,6 +19,10 @@ The Crazyswarm2 drone connection drives cf1 through `crazyflie_py` 1.0.7, as [AD
 - **Takeoff height and speed are module constants.** The 0.4 m takeoff height and the 0.3 m/s speed limit come from ADR 0007. They are not `HostConfig` fields, so message format v1 doesn't change.
 - **The person at the flight host stops the bridge.** A hand-typed `ros2 service call /cf1/land` does nothing while the bridge streams, because the next `cmd_position` cancels it. To end a flight by hand, the person presses Ctrl-C in the bridge's terminal, and shutdown lands the drone. The emergency cut (`ros2 service call /cf1/emergency std_srvs/srv/Empty`) is the last resort.
 
+## Amendment, 2026-11-13: the takeoff timeout lands a drone with a lost link
+
+The takeoff timeout sends land even when the drone's link is lost. During the climb the drone flies on its own planner, and the stream doesn't run. So the 2 s motor cutoff never fires, and nothing else would end the flight. A land the drone can't hear costs nothing, and it reaches the drone if only the poses stopped. The rule that the drone connection doesn't land a drone it can't reach still holds for commands from the bridge and for `close()`.
+
 ## Considered options
 
 - **Stop as an onboard hover (`notifySetpointsStop`, then a relative `goTo`)**: rejected for now. The drone would hold with no radio. But it would keep flying after the bridge died, and every stop would pass through the same planner gap as land.
