@@ -26,6 +26,10 @@ _Avoid_: Trial log, flight record
 The boundary inside the Python command bridge between the bridge's own logic and whatever moves the drones. A mock drone connection stands in for the swarm during development, and the Crazyswarm2 drone connection drives the real swarm.
 _Avoid_: Driver, adapter, backend
 
+**Crazyswarm2 client**:
+The boundary between the Crazyswarm2 drone connection and Crazyswarm2. It sends takeoff, land, notify setpoints stop, `cmd_position`, and set parameter, and it delivers poses, status, and stream ticks back. The real Crazyswarm2 client wraps `crazyflie_py` and is the only module that imports `rclpy`. The fake Crazyswarm2 client simulates drones in tests.
+_Avoid_: Client (alone), ROS wrapper
+
 **Swarm**:
 The three Crazyflie drones flown in a trial, each with its own radio address.
 _Avoid_: Fleet, team (for the drones)

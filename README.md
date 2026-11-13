@@ -51,7 +51,7 @@ uv run python -m touch_vision_drone_control.backend_server
 
 It listens on `127.0.0.1:8765`. Two options choose what the bridge drives, and a third turns on the message log:
 
-- `--drones mock|crazyswarm2` picks the drone connection. The default is `mock`. The Crazyswarm2 drone connection does not exist yet, so `crazyswarm2` stops the bridge with an error.
+- `--drones mock|crazyswarm2` picks the drone connection. The default is `mock`. The Crazyswarm2 drone connection exists, but its real Crazyswarm2 client does not yet, so `crazyswarm2` stops the bridge with an error.
 - `--config course|takeoff` picks the host configuration. The default is `course`, the placeholder course. `takeoff` is one drone, cf1, in a 1 m by 1 m box around its takeoff spot ([ADR 0007](docs/adr/0007-fly-one-drone-without-motive.md)). Fly it from the flight test page at `/flight-test.html`, as [web/README.md](web/README.md#flight-test-page) describes.
 - `--log PATH` appends the message log to `PATH`, such as `data/runs/flight.jsonl`, which Git ignores. Without it, the bridge writes no log.
 
@@ -223,7 +223,7 @@ uv run pytest
 
 `test/test_backend_server.py` checks the startup options and the host configurations they pick. `test/test_no_ros_imports.py` checks that the bridge modules and the mock startup path import without ROS 2. `test/test_tablet_web_app.py` checks that the bridge serves the built tablet web app beside `/ws`. `test/test_ws_server.py` opens a real WebSocket to `/ws` through pytest-aiohttp and builds its messages from the [example messages](protocol/examples/).
 
-`test/test_drone_connection_contract.py` is the contract suite for drone connections. It runs against the mock drone connection now. The hardware team adds a harness for the Crazyswarm2 drone connection to its `HARNESSES` list, and the same tests then run against the real swarm.
+`test/test_drone_connection_contract.py` is the contract suite for drone connections. It runs against the mock drone connection and against the Crazyswarm2 drone connection with a fake Crazyswarm2 client (`test/fake_crazyswarm2_client.py`), so neither needs ROS 2. A harness for the real cf1 is planned. It will run the same tests against the real drone.
 
 The [evaluation plan](CONTEXT.md#evaluation-method-and-numerical-targets) defines the study procedure, numerical targets, and scoring rules.
 Record commands, equipment, dependency versions, results, and limitations for each test run.

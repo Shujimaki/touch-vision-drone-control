@@ -1,8 +1,7 @@
 """Contract suite: what every drone connection must do.
 
 Each harness builds one drone connection and a `wait` function that lets time
-pass. The mock drone connection moves a fake clock. The hardware team adds a
-harness for the Crazyswarm2 drone connection to HARNESSES, where `wait` sleeps.
+pass. The mock drone connection moves a fake clock.
 """
 
 from collections.abc import Callable
@@ -10,19 +9,22 @@ from dataclasses import dataclass
 
 import pytest
 from fake_clock import FakeClock
+from fake_crazyswarm2_client import FakeCrazyswarm2Client
 
+from touch_vision_drone_control.crazyswarm2_drone_connection import SPEED_LIMIT_MPS, Crazyswarm2DroneConnection
 from touch_vision_drone_control.drone_connection import (
     DroneConnection,
     DroneReport,
     FlightState,
     Position,
 )
+from touch_vision_drone_control.host_config import TAKEOFF_CONFIG
 from touch_vision_drone_control.mock_drone_connection import MockDroneConnection
 
 DRONES = ["cf1", "cf2", "cf3"]
 MOCK_SPEED_LIMIT_MPS = 0.5
-MOCK_MAX_MOVE_M = 0.5
-MOCK_TOLERANCE_M = 0.05
+SIMULATED_MAX_MOVE_M = 0.5
+SIMULATED_TOLERANCE_M = 0.05
 
 
 @dataclass(kw_only=True)
@@ -43,12 +45,29 @@ def mock_harness() -> Harness:
         wait=clock.advance,
         timeout_s=30.0,
         speed_limit_mps=MOCK_SPEED_LIMIT_MPS,
-        max_move_m=MOCK_MAX_MOVE_M,
-        tolerance_m=MOCK_TOLERANCE_M,
+        max_move_m=SIMULATED_MAX_MOVE_M,
+        tolerance_m=SIMULATED_TOLERANCE_M,
     )
 
 
-HARNESSES = [pytest.param(mock_harness, id="mock")]
+def fake_crazyswarm2_harness() -> Harness:
+    clock = FakeClock()
+    client = FakeCrazyswarm2Client(clock, TAKEOFF_CONFIG.drones)
+    connection = Crazyswarm2DroneConnection(TAKEOFF_CONFIG, clock=clock, client=client)
+    return Harness(
+        connection=connection,
+        wait=client.advance,
+        timeout_s=30.0,
+        speed_limit_mps=SPEED_LIMIT_MPS,
+        max_move_m=SIMULATED_MAX_MOVE_M,
+        tolerance_m=SIMULATED_TOLERANCE_M,
+    )
+
+
+HARNESSES = [
+    pytest.param(mock_harness, id="mock"),
+    pytest.param(fake_crazyswarm2_harness, id="fake-crazyswarm2"),
+]
 
 
 @pytest.fixture(params=HARNESSES)
