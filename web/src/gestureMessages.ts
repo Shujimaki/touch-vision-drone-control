@@ -1,9 +1,13 @@
 // messages sent between the page and the gesture worker
 
-import type { readGestureFrame } from "./gesture";
-
-// data returned by our frame-reading function
-export type GestureFrameResult = ReturnType<typeof readGestureFrame>;
+// data returned by our frame-reading function; null when no hand is seen
+export interface GestureFrameResult {
+  handDetected: boolean;
+  label: string | null;
+  score: number | null;
+  wristX: number | null;
+  wristY: number | null;
+}
 
 // messages from the page to the worker; either initialization or frame-processing
 export type GestureWorkerRequest =

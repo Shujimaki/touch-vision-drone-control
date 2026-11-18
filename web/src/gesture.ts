@@ -5,6 +5,7 @@ import {
   FilesetResolver, //locates runtime files
   GestureRecognizer //class for creating gesture recognizer object
 } from "@mediapipe/tasks-vision";
+import type { GestureFrameResult } from "./gestureMessages";
 
 export async function createGestureRecognizer(
   assetBaseUrl: string
@@ -44,7 +45,7 @@ export function readGestureFrame(
   recognizer: GestureRecognizer, // recognizer object
   frame: ImageBitmap, // one camera frame that can be transferred to a worker
   timestampMs: number // timestamp in milliseconds
-) {
+): GestureFrameResult {
     // process specific frame at that timestamp
     const result = recognizer.recognizeForVideo(frame, timestampMs);
 
