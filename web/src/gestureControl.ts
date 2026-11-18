@@ -12,7 +12,7 @@ export interface GestureControlConfig {
 }
 
 export interface GestureControlState {
-  mode: "waiting" | "confirming" | "active" | "unrecognized" | "locked";
+  mode: "idle" | "confirming" | "active" | "unrecognized" | "locked" | "hand_loss";
   rateMps: number;
   neutralY: number | null;
 }
@@ -20,7 +20,7 @@ export interface GestureControlState {
 const FILTER_SAMPLES = 5;
 
 export class GestureController {
-  private mode: GestureControlState["mode"] = "waiting";
+  private mode: GestureControlState["mode"] = "idle";
   private neutralY: number | null = null;
   private confirmStartMs: number | null = null;
   private confirmY: number | null = null;
@@ -57,8 +57,16 @@ export class GestureController {
       this.clearConfirmation();
       this.wristSamples = [];
 
-      if (this.mode !== "locked") {
-        this.mode = "waiting";
+      // lost the hand mid-control; hold altitude till a fresh open palm
+      if (
+        this.mode === "active" ||
+        this.mode === "unrecognized" ||
+        this.mode === "hand_loss"
+      ) {
+        this.mode = "hand_loss";
+        this.neutralY = null;
+      } else if (this.mode !== "locked") {
+        this.mode = "idle";
         this.neutralY = null;
       }
 
@@ -90,8 +98,8 @@ export class GestureController {
 
       if (this.mode === "active" || this.mode === "unrecognized") {
         this.mode = "unrecognized";
-      } else if (this.mode !== "locked") {
-        this.mode = "waiting";
+      } else if (this.mode !== "locked" && this.mode !== "hand_loss") {
+        this.mode = "idle";
       }
 
       return this.state(0);
@@ -137,7 +145,7 @@ export class GestureController {
 
   // clear everything when the camera is turned off
   reset(): void {
-    this.mode = "waiting";
+    this.mode = "idle";
     this.neutralY = null;
     this.clearConfirmation();
     this.wristSamples = [];
