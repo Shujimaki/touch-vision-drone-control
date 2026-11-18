@@ -1,7 +1,7 @@
 // Mockup of the tablet interface. Components draw the fixed sample data into index.html, and the UI responds to the
 // operator: drag drones on the map, pick the video, switch tabs and theme, filter the log. This file keeps only what
 // the operator changes on screen. Nothing is simulated (no flight, sensors or trials). MediaPipe recognizes gestures
-// locally, but no gesture messages are sent yet.
+// locally, and the gesture state and frames go to the bridge in input.
 import "./styles.css";
 import { COURSE, SAMPLE, sampleDrones, sampleLog, type Gesture, type TrialRecord } from "./sample";
 import { PAL, type Pal } from "./theme";
@@ -19,6 +19,8 @@ import { applyTelemetry } from "./droneEntities";
 import { startGestureClient, type GestureClient } from "./gestureClient";
 import { GestureController, type GestureControlState } from "./gestureControl";
 import { FpsMeter } from "./fpsMeter";
+import type { Frame } from "./protocol";
+import type { GestureReading } from "./connection";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -48,6 +50,15 @@ const ui = {
 let link: ConnectionState = { status: "connecting" };
 const log = sampleLog();
 const gestureFps = new FpsMeter(); // measures gesture results per second
+let gestureFrames: Frame[] = []; // frames since the last input, for the trial records
+
+// what the altitude channel sends on each input tick
+function gestureReading(): GestureReading {
+  const live = ui.liveControl, frames = gestureFrames;
+  gestureFrames = [];
+  if (!live) return { state: "idle", rate: 0, frames };
+  return { state: live.mode, rate: live.rateMps, neutralY: live.neutralY, frames };
+}
 const trials: TrialRecord[] = [{ id: SAMPLE.trial.id, session: SAMPLE.trial.session, t0: SAMPLE.trial.t0, t1: null, outcome: null, dh: 0, restrict: 0 }];
 let K: Pal = PAL.dark, view: View = fitView(600, 600, COURSE.arena);
 const course = () => ({ ...COURSE, z: { ...COURSE.z, min: ui.settings.zmin, max: ui.settings.zmax } });
@@ -290,7 +301,7 @@ byId("btnTakeoff").addEventListener("click", () => {
   ui.stopped = false; estop.classList.remove("fired"); byId("estopTitle").textContent = "E-STOP"; byId("estopSub").textContent = "Hold 1 s";
 });
 
-// Hand camera: live preview and local gesture recognition. No altitude commands yet.
+// Hand camera: live preview and local gesture recognition. The bridge gets the state through gestureReading.
 function cameraNote(text: string, ok = false): void {
   const n = byId("camNote");
   n.hidden = !text;
@@ -336,6 +347,7 @@ async function toggleCamera(): Promise<void> {
     ui.gestureController = null;
     gestureFps.reset();
     ui.liveControl = null;
+    gestureFrames = [];
     renderOverlay(null);
     renderSoon();
 
@@ -379,6 +391,13 @@ async function toggleCamera(): Promise<void> {
         const fps = gestureFps.tick(now);
         const frameMs = now - tMs; // time from sending the frame to getting its result
         cameraNote(`${fps} FPS · ${frameMs.toFixed(0)} ms per frame`, fps >= 15); // so2 wants 15 fps or more
+
+        // keep every frame till the next input; drop the oldest past 10
+        gestureFrames.push({
+          t_ms: Math.round(tMs * 10) / 10, label: result.label, score: result.score,
+          wrist_x: result.wristX, wrist_y: result.wristY,
+        });
+        if (gestureFrames.length > 10) gestureFrames.shift();
 
         const control = ui.gestureController!.update(result, tMs);
         logMode(ui.liveControl?.mode, control.mode);
@@ -474,4 +493,15 @@ const bridge = connect({
     ui.telemetrySeen = true; renderSoon();
   },
   onHostLost: releaseAll,
+  gesture: gestureReading,
+});
+
+// hidden page: drop holds, go idle and send one last input (message format v1)
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "hidden") return;
+  ui.gestureController?.reset();
+  ui.liveControl = null;
+  gestureFrames = [];
+  bridge.releaseAllAndSendInput();
+  releaseAll();
 });

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { connect, linkLabel, socketUrl, type Connection, type ConnectionOptions, type ConnectionState, type SocketLike } from "../src/connection";
+import { connect, linkLabel, socketUrl, type Connection, type ConnectionOptions, type ConnectionState, type GestureReading, type SocketLike } from "../src/connection";
 import { parseHostMessage, type FlightCommand, type Held, type Reply, type Welcome } from "../src/protocol";
 
 const examples = join(import.meta.dirname, "..", "..", "protocol", "examples");
@@ -439,6 +439,29 @@ describe("input stream", () => {
     vi.advanceTimersByTime(40);
 
     expect(inputs(socket)[0]).toMatchObject({ gesture: { state: "active", rate: 0.12, neutral_y: null }, frames: [frame] });
+  });
+
+  it("sends neutral_y and the rate only while the gesture is active", () => {
+    let reading: GestureReading = { state: "active", rate: 0.12, neutralY: 0.4, frames: [] };
+    const { socket } = connected(undefined, () => reading);
+
+    vi.advanceTimersByTime(40);
+    reading = { state: "unrecognized", rate: 0.12, neutralY: 0.4, frames: [] };
+    vi.advanceTimersByTime(40);
+
+    expect(inputs(socket)[0]).toMatchObject({ gesture: { state: "active", rate: 0.12, neutral_y: 0.4 } });
+    expect(inputs(socket)[1]).toMatchObject({ gesture: { state: "unrecognized", rate: 0, neutral_y: null } });
+  });
+
+  it("keeps the gesture rate within rate_max and sends at most 10 frames", () => {
+    const frame = { t_ms: 5320, label: null, score: null, wrist_x: null, wrist_y: null };
+    const { socket } = connected(undefined, () => ({ state: "active", rate: 99, neutralY: 0.4, frames: Array(12).fill(frame) }));
+
+    vi.advanceTimersByTime(40);
+
+    const sent = inputs(socket)[0] as { gesture: { rate: number }; frames: unknown[] };
+    expect(sent.gesture.rate).toBe(0.2); // rate_max in the welcome example
+    expect(sent.frames).toHaveLength(10);
   });
 
   it("releases every hold when the bridge is lost, so a reconnect needs a new finger", () => {

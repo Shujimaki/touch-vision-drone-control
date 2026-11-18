@@ -22,7 +22,7 @@ export interface SocketLike {
 }
 
 /** What the gesture channel reports each input tick. */
-export interface GestureReading { state: GestureState; rate: number; frames: Frame[] }
+export interface GestureReading { state: GestureState; rate: number; neutralY?: number | null; frames: Frame[] }
 
 export const idleGesture = (): GestureReading => ({ state: "idle", rate: 0, frames: [] });
 
@@ -132,10 +132,17 @@ export function connect(options: ConnectionOptions): Connection {
     const expectTelemetryWithin = (ms: number) => { clearTimeout(deadline); deadline = setTimeout(() => fail("bridge_lost"), ms); };
 
     function sendInput(): void {
-      const reading = gesture();
+      const reading = gesture(), active = reading.state === "active";
+      const rateMax = state.status === "connected" ? state.welcome.config.rate_max : 0;
+      // rate and neutral_y only count in active; at most 10 frames (message format v1)
       const input: Input = {
         type: "input", v: VERSION, seq: ++seq, t_ms: tabletMs(), rtt_ms: rttMs, held: [...contacts.values()],
-        gesture: { state: reading.state, rate: reading.rate, neutral_y: null }, frames: reading.frames,
+        gesture: {
+          state: reading.state,
+          rate: active ? clamp(reading.rate, -rateMax, rateMax) : 0,
+          neutral_y: active ? reading.neutralY ?? null : null,
+        },
+        frames: reading.frames.slice(-10),
       };
       socket.send(JSON.stringify(input));
     }

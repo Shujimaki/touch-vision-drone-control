@@ -23,7 +23,7 @@ The interface responds to the operator, but only on screen. It is online at <htt
 The tablet simulates nothing itself. The only messages are the connection handshake, takeoff and land commands, input, and telemetry:
 
 - no altitude change, sensor readings, collisions, or defensive hover;
-- no gesture recognition, and no trials that start or end. The input's altitude channel always reports `idle` with rate 0;
+- no trials that start or end. With the hand camera on, MediaPipe recognizes gestures and the input's altitude channel sends the gesture state, rate, neutral point, and frames. The bridge does not change altitude from it yet;
 - no events, and no trial commands. The main page sends no stop command. The flight test page does. The page shows the connection state in the map's top-right corner. It draws each drone entity at its measured position from telemetry. The other panels still show the sample data.
 
 Without a bridge, a dragged drone moves only on the map. Its sample sensor readings belong to its starting spot, so they clear once it moves.
