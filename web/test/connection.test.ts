@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { connect, linkLabel, socketUrl, type Connection, type ConnectionState, type SocketLike } from "../src/connection";
-import { parseHostMessage, type FlightCommand, type Welcome } from "../src/protocol";
+import { connect, linkLabel, socketUrl, type Connection, type ConnectionOptions, type ConnectionState, type SocketLike } from "../src/connection";
+import { parseHostMessage, type FlightCommand, type Held, type Reply, type Welcome } from "../src/protocol";
 
 const examples = join(import.meta.dirname, "..", "..", "protocol", "examples");
 const example = (name: string): Record<string, unknown> => JSON.parse(readFileSync(join(examples, name + ".json"), "utf8"));
@@ -21,32 +21,37 @@ class FakeSocket implements SocketLike {
   bridgeCloses(): void { this.onclose?.(new Event("close") as CloseEvent); }
 }
 
-function start() {
+function start(clock: () => number = () => 5321.7, gesture?: ConnectionOptions["gesture"]) {
   const sockets: FakeSocket[] = [], states: ConnectionState["status"][] = [], warnings: string[] = [];
-  const telemetry: unknown[] = [], hostLost: string[] = [];
+  const telemetry: unknown[] = [], hostLost: string[] = [], commandReplies: [string, Reply][] = [];
   const connection = connect({
     openSocket: () => { const s = new FakeSocket(); sockets.push(s); return s; },
-    tabletClockMs: () => 5321.7, client: "tablet-web 0.1.0", userAgent: "TestAgent/1.0",
+    tabletClockMs: clock, client: "tablet-web 0.1.0", userAgent: "TestAgent/1.0", gesture,
     onState: s => states.push(s.status), warn: w => warnings.push(w),
     onTelemetry: t => telemetry.push(t), onHostLost: reason => hostLost.push(reason),
+    onCommandReply: (name, reply) => commandReplies.push([name, reply]),
   });
   const socket = sockets[0]!;
   const latest = () => sockets[sockets.length - 1]!;
-  return { socket, sockets, latest, states, warnings, telemetry, hostLost, connection };
+  return { socket, sockets, latest, states, warnings, telemetry, hostLost, commandReplies, connection };
 }
 
 const TELEMETRY = example("telemetry-cf3-defensive-hover");
 const WELCOME = example("welcome");
 const TELEMETRY_TIMEOUT_MS = (WELCOME["config"] as { telemetry_timeout_ms: number }).telemetry_timeout_ms;
 
-function command(connection: Connection, name: FlightCommand): void {
+function connectedState(connection: Connection) {
   const state = connection.state();
   if (state.status !== "connected") throw new Error(`expected a connected state, got ${state.status}`);
-  state.command(name, ["cf1"]);
+  return state;
 }
 
-function connected() {
-  const c = start();
+function command(connection: Connection, name: FlightCommand): void {
+  connectedState(connection).command(name, ["cf1"]);
+}
+
+function connected(clock?: () => number, gesture?: ConnectionOptions["gesture"]) {
+  const c = start(clock, gesture);
   c.socket.open();
   c.socket.receive(WELCOME);
   return c;
@@ -243,6 +248,14 @@ describe("connection", () => {
     expect(socket.sent[1]).toEqual({ ...example("command-takeoff"), seq: 2, t_ms: 5321.7, args: { drones: ["cf1"] } });
   });
 
+  it("sends stop with empty args", () => {
+    const { socket, connection } = connected();
+
+    connectedState(connection).stop();
+
+    expect(socket.sent[1]).toEqual({ ...example("command-takeoff"), seq: 2, t_ms: 5321.7, name: "stop", args: {} });
+  });
+
   it("numbers commands from 2 again on a new socket", () => {
     const { latest, connection } = connected();
     command(connection, "takeoff");
@@ -256,6 +269,28 @@ describe("connection", () => {
     expect(latest().sent.map(m => [m["type"], m["seq"]])).toEqual([["hello", 1], ["command", 2]]);
   });
 
+  it("reports each command's reply with the command name, including why it was refused", () => {
+    const { socket, connection, commandReplies } = connected();
+    command(connection, "takeoff");
+    connectedState(connection).stop();
+    const refused = { ...example("reply-rejected"), ref: 2, code: "not_allowed", detail: "cf1 is not grounded" };
+    const accepted = { ...example("reply-rejected"), ref: 3, ok: true, code: null, detail: null };
+
+    socket.receive(refused);
+    socket.receive(accepted);
+
+    expect(commandReplies).toEqual([["takeoff", refused], ["stop", accepted]]);
+  });
+
+  it("does not report a reply to an input as a command reply", () => {
+    const { socket, commandReplies } = connected();
+    vi.advanceTimersByTime(40);
+
+    socket.receive({ ...example("reply-rejected"), ref: 2, code: "invalid", detail: "bad held entry" });
+
+    expect(commandReplies).toEqual([]);
+  });
+
   it("ignores telemetry before welcome", () => {
     const { socket, telemetry } = start();
     socket.open();
@@ -263,6 +298,251 @@ describe("connection", () => {
     socket.receive(TELEMETRY);
 
     expect(telemetry).toEqual([]);
+  });
+});
+
+const inputs = (socket: FakeSocket) => socket.sent.filter(m => m["type"] === "input");
+const lastHeld = (socket: FakeSocket) => inputs(socket).at(-1)?.["held"];
+
+function telemetryFor(ms: number, socket: FakeSocket): void {
+  for (let t = 0; t < ms; t += 100) { vi.advanceTimersByTime(100); socket.receive(TELEMETRY); }
+}
+
+describe("input stream", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("sends input at 30 Hz from welcome, with no held drone and the idle gesture stub", () => {
+    const { socket } = connected();
+    expect(inputs(socket)).toEqual([]);
+
+    telemetryFor(1000, socket);
+
+    expect(inputs(socket)).toHaveLength(30);
+    expect(inputs(socket).map(m => m["seq"])).toEqual(Array.from({ length: 30 }, (_, i) => i + 2));
+    expect(inputs(socket)[0]).toEqual({
+      type: "input", v: 1, seq: 2, t_ms: 5321.7, rtt_ms: null, held: [],
+      gesture: { state: "idle", rate: 0, neutral_y: null }, frames: [],
+    });
+  });
+
+  it("keeps a still finger's drone in held at its commanded target, with the press time", () => {
+    const { socket, connection } = connected();
+    socket.receive(TELEMETRY);
+
+    expect(connection.hold({ pointerId: 7, timeStamp: 5300.5 }, "cf1")).toBe(true);
+    telemetryFor(1000, socket);
+
+    const held = inputs(socket).map(m => m["held"]);
+    expect(held).toHaveLength(30);
+    expect(new Set(held.map(h => JSON.stringify(h)))).toEqual(new Set([JSON.stringify([
+      { id: "cf1", x: 1.2, y: 0.85, touch_ms: 5300.5, follow: true },
+    ])]));
+  });
+
+  function holdingCf1() {
+    const c = connected();
+    c.socket.receive(TELEMETRY);
+    c.connection.hold({ pointerId: 7, timeStamp: 5300.5 }, "cf1");
+    return c;
+  }
+
+  it("sends the dragged finger's position as the target, with the move time", () => {
+    const { socket, connection } = holdingCf1();
+
+    const accepted = connection.drag({ pointerId: 7, timeStamp: 5310.25, x: 1.6, y: 1.0 });
+    telemetryFor(100, socket);
+
+    expect(accepted).toEqual({ x: 1.6, y: 1.0, blocked: false });
+    expect(lastHeld(socket)).toEqual([{ id: "cf1", x: 1.6, y: 1.0, touch_ms: 5310.25, follow: true }]);
+  });
+
+  it("stops a drag into the restricted zone at the zone margin, never inside it", () => {
+    const { socket, connection } = holdingCf1();
+
+    const accepted = connection.drag({ pointerId: 7, timeStamp: 5310, x: 2.655, y: 1.775 });
+    telemetryFor(100, socket);
+
+    const [target] = lastHeld(socket) as { x: number; y: number }[];
+    const outside = Math.max(Math.abs(target!.x - 2.655), Math.abs(target!.y - 1.775)) - (0.59 + 0.06);
+    expect(accepted?.blocked).toBe(true);
+    expect(outside).toBeGreaterThanOrEqual(0);
+    expect(outside).toBeLessThan(0.01);
+  });
+
+  it("keeps the target inside the capture volume", () => {
+    const { socket, connection } = holdingCf1();
+
+    connection.drag({ pointerId: 7, timeStamp: 5310, x: -1, y: 0.85 });
+    telemetryFor(100, socket);
+
+    expect(lastHeld(socket)).toEqual([{ id: "cf1", x: 0.25, y: 0.85, touch_ms: 5310, follow: true }]);
+  });
+
+  it("ignores a drag from a pointer that holds nothing", () => {
+    const { socket, connection } = holdingCf1();
+
+    expect(connection.drag({ pointerId: 8, timeStamp: 5310, x: 1.6, y: 1.0 })).toBeNull();
+    telemetryFor(100, socket);
+
+    expect(lastHeld(socket)).toEqual([{ id: "cf1", x: 1.2, y: 0.85, touch_ms: 5300.5, follow: true }]);
+  });
+
+  it("removes a lifted finger's drone from held", () => {
+    const { socket, connection } = holdingCf1();
+
+    connection.lift(7);
+    telemetryFor(100, socket);
+
+    expect(lastHeld(socket)).toEqual([]);
+    expect(connection.drag({ pointerId: 7, timeStamp: 5310, x: 1.6, y: 1.0 })).toBeNull();
+  });
+
+  it.each([
+    ["before any telemetry", (c: ReturnType<typeof connected>) => c, "cf1"],
+    ["for a drone that is not flying", (c: ReturnType<typeof connected>) => {
+      c.socket.receive({ ...TELEMETRY, drones: (TELEMETRY["drones"] as object[]).map(d => ({ ...d, state: "grounded" })) });
+      return c;
+    }, "cf1"],
+    ["for a drone telemetry does not name", (c: ReturnType<typeof connected>) => { c.socket.receive(TELEMETRY); return c; }, "cf9"],
+    ["for a drone another finger holds", (c: ReturnType<typeof connected>) => {
+      c.socket.receive(TELEMETRY); c.connection.hold({ pointerId: 1, timeStamp: 1 }, "cf1"); return c;
+    }, "cf1"],
+  ])("refuses a hold %s", (_, setUp, drone) => {
+    const c = setUp(connected());
+
+    expect(c.connection.hold({ pointerId: 7, timeStamp: 5300 }, drone)).toBe(false);
+    telemetryFor(100, c.socket);
+    expect((lastHeld(c.socket) as Held[]).filter(h => h.touch_ms === 5300)).toEqual([]);
+  });
+
+  it("sends rtt_ms as null until telemetry acknowledges an input, then the latest round-trip time", () => {
+    let now = 5321.7;
+    const { socket } = connected(() => now);
+    vi.advanceTimersByTime(100);
+    socket.receive({ ...TELEMETRY, host_ms: 1003.0, ack: { seq: null, t_ms: null, host_rx_ms: null } });
+    vi.advanceTimersByTime(100);
+    const early = inputs(socket).map(m => m["rtt_ms"]);
+
+    now = 5420.0;
+    socket.receive({ ...TELEMETRY, host_ms: 1003.0, ack: { seq: 2, t_ms: 5400.0, host_rx_ms: 1000.0 } });
+    vi.advanceTimersByTime(40);
+
+    expect(new Set(early)).toEqual(new Set([null]));
+    expect(inputs(socket).at(-1)?.["rtt_ms"]).toBe(17);
+  });
+
+  it("takes the altitude channel from the gesture function on each tick", () => {
+    const frame = { t_ms: 5320, label: "Open_Palm", score: 0.9, wrist_x: 0.4, wrist_y: 0.38 };
+    const { socket } = connected(undefined, () => ({ state: "active", rate: 0.12, frames: [frame] }));
+
+    vi.advanceTimersByTime(40);
+
+    expect(inputs(socket)[0]).toMatchObject({ gesture: { state: "active", rate: 0.12, neutral_y: null }, frames: [frame] });
+  });
+
+  it("releases every hold when the bridge is lost, so a reconnect needs a new finger", () => {
+    const { sockets, connection } = holdingCf1();
+    vi.advanceTimersByTime(TELEMETRY_TIMEOUT_MS);
+    const sentBeforeLoss = inputs(sockets[0]!).length;
+    vi.advanceTimersByTime(1000);
+    sockets[1]!.open();
+    sockets[1]!.receive(WELCOME);
+
+    telemetryFor(1000, sockets[1]!);
+
+    expect(connection.drag({ pointerId: 7, timeStamp: 5310, x: 1.6, y: 1.0 })).toBeNull();
+    expect(inputs(sockets[0]!)).toHaveLength(sentBeforeLoss);
+    expect(inputs(sockets[1]!)).toHaveLength(30);
+    expect(new Set(inputs(sockets[1]!).map(m => JSON.stringify(m["held"])))).toEqual(new Set(["[]"]));
+  });
+
+  it("refuses a hold before the bridge welcomes the tablet", () => {
+    const { socket, connection } = start();
+    socket.open();
+
+    expect(connection.hold({ pointerId: 7, timeStamp: 5300 }, "cf1")).toBe(false);
+  });
+});
+
+const TAKEOFF_WELCOME = {
+  ...WELCOME,
+  config: {
+    ...(WELCOME["config"] as object), id: "takeoff-draft-0.1", drones: ["cf1"], z_max: 1.0,
+    course: {
+      room: { x_min: -0.6, x_max: 0.6, y_min: -0.6, y_max: 0.6 },
+      capture_volume: { x_min: -0.5, x_max: 0.5, y_min: -0.5, y_max: 0.5 },
+      restricted_zone: { x_min: 0.52, x_max: 0.58, y_min: 0.52, y_max: 0.58 },
+      obstacles: [], hoops: [], pads: [{ id: "cf1", x: 0, y: 0 }],
+    },
+  },
+};
+const CF1_FLYING = {
+  ...TELEMETRY,
+  drones: [{ ...(TELEMETRY["drones"] as object[])[0], id: "cf1", state: "flying", x: 0, y: 0, z: 0.4, cmd: { x: 0, y: 0, z: 0.4 } }],
+};
+
+describe("flight test page input", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  function flyingInTakeoffBox() {
+    const c = start();
+    c.socket.open();
+    c.socket.receive(TAKEOFF_WELCOME);
+    c.socket.receive(CF1_FLYING);
+    return c;
+  }
+
+  it("sends a drag as exactly one held entry with the takeoff-frame target", () => {
+    const { socket, connection } = flyingInTakeoffBox();
+
+    connection.hold({ pointerId: 3, timeStamp: 100 }, "cf1");
+    connection.drag({ pointerId: 3, timeStamp: 120, x: 0.3, y: -0.2 });
+    vi.advanceTimersByTime(100);
+
+    expect(inputs(socket).at(-1)).toMatchObject({
+      held: [{ id: "cf1", x: 0.3, y: -0.2, touch_ms: 120, follow: true }],
+      gesture: { state: "idle", rate: 0, neutral_y: null },
+    });
+  });
+
+  it("releases every contact and sends a final input at once when the page is hidden", () => {
+    const { socket, connection } = flyingInTakeoffBox();
+    connection.hold({ pointerId: 3, timeStamp: 100 }, "cf1");
+    vi.advanceTimersByTime(40);
+    const before = inputs(socket).length;
+
+    connection.releaseAllAndSendInput();
+
+    expect(inputs(socket)).toHaveLength(before + 1);
+    expect(inputs(socket).at(-1)).toMatchObject({ held: [], gesture: { state: "idle", rate: 0, neutral_y: null } });
+    expect(connection.drag({ pointerId: 3, timeStamp: 130, x: 0.3, y: 0 })).toBeNull();
+  });
+
+  it("sends no input on release before welcome or after the bridge is lost", () => {
+    const { socket, sockets, connection } = start();
+    socket.open();
+    connection.releaseAllAndSendInput();
+    expect(inputs(socket)).toEqual([]);
+
+    socket.receive(TAKEOFF_WELCOME);
+    vi.advanceTimersByTime(TELEMETRY_TIMEOUT_MS);
+    const sentBeforeLoss = socket.sent.length;
+    connection.releaseAllAndSendInput();
+
+    expect(sockets[0]!.sent).toHaveLength(sentBeforeLoss);
+  });
+
+  it("reports a command reply once, even if the bridge repeats it", () => {
+    const { socket, connection, commandReplies } = flyingInTakeoffBox();
+    connectedState(connection).stop();
+    const accepted = { ...example("reply-rejected"), ref: 2, ok: true, code: null, detail: null };
+
+    socket.receive(accepted);
+    socket.receive(accepted);
+
+    expect(commandReplies).toEqual([["stop", accepted]]);
   });
 });
 
@@ -309,7 +589,7 @@ function parsedWelcome(): Welcome {
 describe("linkLabel", () => {
   it.each<[ConnectionState, string, string | null]>([
     [{ status: "connecting" }, "Connecting", null],
-    [{ status: "connected", welcome: parsedWelcome(), command: () => {} }, "Connected", null],
+    [{ status: "connected", welcome: parsedWelcome(), command: () => {}, stop: () => {} }, "Connected", null],
     [{ status: "failed", cause: "bridge_lost" }, "Connection failed", "Bridge lost, retrying"],
     [{ status: "failed", cause: "no_bridge" }, "Connection failed", "No bridge, retrying"],
     [{ status: "failed", cause: "operator_busy" }, "Connection failed", "Operator busy, retrying"],

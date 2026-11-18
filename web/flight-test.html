@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#181C18">
+<link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon-64.png">
+<title>Flight test</title>
+<script type="module" src="/src/flightTest.ts"></script>
+</head>
+<body>
+<div class="ft">
+  <aside class="ft-side">
+    <header class="ft-head">
+      <h1>Flight test <span class="ft-drone">DRONE 1</span></h1>
+      <div class="ft-link" id="linkState" data-state="connecting"><b id="linkHead">Connecting</b><span id="linkDetail" hidden></span></div>
+      <p class="ft-config m" id="configId">No configuration yet</p>
+    </header>
+    <div class="ft-buttons">
+      <button class="ft-btn to" id="btnTakeoff" disabled>Take off</button>
+      <button class="ft-btn ld" id="btnLand" disabled>Land</button>
+      <button class="ft-btn st" id="btnStop" disabled>Stop</button>
+    </div>
+    <p class="ft-reply" id="reply" aria-live="polite" hidden></p>
+    <dl class="ft-tel m">
+      <dt>State</dt><dd id="telState">--</dd>
+      <dt>Position</dt><dd id="telPos">--</dd>
+      <dt>Target</dt><dd id="telCmd">--</dd>
+      <dt>Position age</dt><dd id="telAge">--</dd>
+      <dt>Radio link</dt><dd id="telLink">--</dd>
+      <dt>Battery</dt><dd id="telBattery">--</dd>
+    </dl>
+    <p class="ft-note">Hold the drone circle with one finger and drag. The drone holds where the finger lifts. A point outside the box is not sent.</p>
+  </aside>
+  <main class="ft-main" id="boxArea">
+    <svg id="boxSvg" aria-label="Capture volume around the takeoff spot, with +x up the screen"></svg>
+  </main>
+</div>
+</body>
+</html>

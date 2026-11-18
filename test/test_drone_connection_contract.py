@@ -1,8 +1,7 @@
 """Contract suite: what every drone connection must do.
 
 Each harness builds one drone connection and a `wait` function that lets time
-pass. The mock drone connection moves a fake clock. The hardware team adds a
-harness for the Crazyswarm2 drone connection to HARNESSES, where `wait` sleeps.
+pass. The mock drone connection moves a fake clock.
 """
 
 from collections.abc import Callable
@@ -10,31 +9,70 @@ from dataclasses import dataclass
 
 import pytest
 from fake_clock import FakeClock
+from fake_crazyswarm2_client import FakeCrazyswarm2Client
 
+from touch_vision_drone_control.crazyswarm2_drone_connection import (
+    SPEED_LIMIT_MPS,
+    STREAM_HZ,
+    Crazyswarm2DroneConnection,
+)
 from touch_vision_drone_control.drone_connection import (
     DroneConnection,
     DroneReport,
     FlightState,
     Position,
 )
+from touch_vision_drone_control.host_config import TAKEOFF_CONFIG
 from touch_vision_drone_control.mock_drone_connection import MockDroneConnection
 
 DRONES = ["cf1", "cf2", "cf3"]
+MOCK_SPEED_LIMIT_MPS = 0.5
+SIMULATED_MAX_MOVE_M = 0.5
+SIMULATED_TOLERANCE_M = 0.05
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Harness:
     connection: DroneConnection
     wait: Callable[[float], None]
     timeout_s: float
+    speed_limit_mps: float
+    max_move_m: float
+    tolerance_m: float
 
 
 def mock_harness() -> Harness:
     clock = FakeClock()
-    return Harness(MockDroneConnection(DRONES, clock=clock), clock.advance, timeout_s=30.0)
+    connection = MockDroneConnection(DRONES, clock=clock, speed_limit_mps=MOCK_SPEED_LIMIT_MPS)
+    return Harness(
+        connection=connection,
+        wait=clock.advance,
+        timeout_s=30.0,
+        speed_limit_mps=MOCK_SPEED_LIMIT_MPS,
+        max_move_m=SIMULATED_MAX_MOVE_M,
+        tolerance_m=SIMULATED_TOLERANCE_M,
+    )
 
 
-HARNESSES = [pytest.param(mock_harness, id="mock")]
+def fake_crazyswarm2_harness() -> Harness:
+    clock = FakeClock()
+    client = FakeCrazyswarm2Client(clock, TAKEOFF_CONFIG.drones)
+    connection = Crazyswarm2DroneConnection(TAKEOFF_CONFIG, clock=clock, client=client)
+    client.advance(1 / STREAM_HZ)
+    return Harness(
+        connection=connection,
+        wait=client.advance,
+        timeout_s=30.0,
+        speed_limit_mps=SPEED_LIMIT_MPS,
+        max_move_m=SIMULATED_MAX_MOVE_M,
+        tolerance_m=SIMULATED_TOLERANCE_M,
+    )
+
+
+HARNESSES = [
+    pytest.param(mock_harness, id="mock"),
+    pytest.param(fake_crazyswarm2_harness, id="fake-crazyswarm2"),
+]
 
 
 @pytest.fixture(params=HARNESSES)
@@ -72,10 +110,31 @@ def fly(harness: Harness, drone: str) -> DroneReport:
 
 def test_target_moves_the_drone(harness: Harness) -> None:
     start = fly(harness, "cf1").position
-    target = Position(start.x + 0.5, start.y + 0.5, start.z + 0.25)
+    move = harness.max_move_m
+    target = Position(start.x + move, start.y + move, start.z + move / 2)
 
     assert harness.connection.send_target("cf1", target).ok
-    wait_until(harness, "cf1", lambda r: r.position.distance_to(target) < 0.05)
+    wait_until(harness, "cf1", lambda r: r.position.distance_to(target) < harness.tolerance_m)
+
+
+def test_target_moves_the_drone_no_faster_than_the_speed_limit(harness: Harness) -> None:
+    start = fly(harness, "cf1")
+    origin = start.position
+    target = Position(origin.x + 0.8 * harness.max_move_m, origin.y, origin.z)
+    samples: list[DroneReport] = []
+
+    def arrived(report: DroneReport) -> bool:
+        samples.append(report)
+        return report.position.distance_to(target) < harness.tolerance_m
+
+    assert harness.connection.send_target("cf1", target).ok
+    wait_until(harness, "cf1", arrived)
+
+    for sample in samples:
+        elapsed = sample.position_measured_at - start.position_measured_at
+        moved = start.position.distance_to(sample.position)
+        allowed = harness.speed_limit_mps * elapsed + harness.tolerance_m
+        assert moved <= allowed, f"moved {moved:.3f} m in {elapsed:.3f} s, allowed {allowed:.3f} m"
 
 
 def test_land_reaches_grounded(harness: Harness) -> None:
@@ -83,12 +142,12 @@ def test_land_reaches_grounded(harness: Harness) -> None:
 
     assert harness.connection.land(["cf1"])["cf1"].ok
     grounded = wait_until(harness, "cf1", lambda r: r.state is FlightState.GROUNDED)
-    assert grounded.position.z == pytest.approx(0.0, abs=0.05)
+    assert grounded.position.z == pytest.approx(0.0, abs=harness.tolerance_m)
 
 
 def test_stop_halts_movement(harness: Harness) -> None:
     start = fly(harness, "cf1").position
-    far = Position(start.x + 3.0, start.y, start.z)
+    far = Position(start.x + 6 * harness.max_move_m, start.y, start.z)
     harness.connection.send_target("cf1", far)
     harness.wait(0.5)
 
@@ -96,22 +155,26 @@ def test_stop_halts_movement(harness: Harness) -> None:
     halted = wait_until(harness, "cf1", lambda r: r.state is FlightState.STOPPED)
     harness.wait(1.0)
 
-    assert report_of(harness, "cf1").position.distance_to(halted.position) < 0.05
-    assert halted.position.distance_to(far) > 1.0
+    assert report_of(harness, "cf1").position.distance_to(halted.position) < harness.tolerance_m
+    assert halted.position.distance_to(far) > 2 * harness.max_move_m
 
 
-def test_stopped_drone_rejects_targets_but_lands(harness: Harness) -> None:
+def test_stopped_drone_rejects_targets_then_lands_grounded(harness: Harness) -> None:
     start = fly(harness, "cf1").position
-    harness.connection.stop()
+
+    assert harness.connection.stop().ok
     wait_until(harness, "cf1", lambda r: r.state is FlightState.STOPPED)
 
-    assert not harness.connection.send_target("cf1", Position(start.x + 1.0, start.y, start.z)).ok
+    target = Position(start.x + 0.8 * harness.max_move_m, start.y, start.z)
+    assert not harness.connection.send_target("cf1", target).ok
     assert harness.connection.land(["cf1"])["cf1"].ok
-    wait_until(harness, "cf1", lambda r: r.state is FlightState.GROUNDED)
+    grounded = wait_until(harness, "cf1", lambda r: r.state is FlightState.GROUNDED)
+    assert grounded.position.z == pytest.approx(0.0, abs=harness.tolerance_m)
 
 
 def test_target_is_rejected_unless_flying(harness: Harness) -> None:
-    target = Position(1.0, 1.0, 1.0)
+    move = harness.max_move_m
+    target = Position(move, move, move)
     assert not harness.connection.send_target("cf1", target).ok
 
     harness.connection.takeoff(["cf1"])

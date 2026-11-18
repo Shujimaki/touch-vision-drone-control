@@ -2,8 +2,8 @@
 
 The Python command bridge talks to the swarm only through `DroneConnection`.
 The mock drone connection stands in for the swarm during development. The
-Crazyswarm2 drone connection drives the real swarm, and it is the only module
-allowed to import `rclpy` (ADR 0001).
+Crazyswarm2 drone connection drives the real swarm. Its real Crazyswarm2 client
+is the only module allowed to import `rclpy` (ADR 0001).
 
 Commands go one way: the bridge sends position targets at its fixed setpoint
 rate, plus takeoff, land, and stop. Reports come back: one `DroneReport` per
@@ -50,7 +50,7 @@ class LinkStatus(str, Enum):
 
 @dataclass(frozen=True)
 class Position:
-    """A point in the motion capture frame, in meters."""
+    """A point in the map frame (x, y on the floor, z up), in meters."""
 
     x: float
     y: float
@@ -101,8 +101,10 @@ class DroneReport:
     """What the drone connection knows about one drone.
 
     Readings arrive by two routes and go stale separately:
-    - `position` comes from the motion capture machine. `position_measured_at`
-      is when it was measured.
+    - `position` comes from the motion capture machine or from the onboard
+      estimate, as the host configuration decides. `position_measured_at` is
+      when the motion capture machine measured it, or when the onboard
+      estimate arrived at the flight host.
     - `ranges`, `battery_v`, and `defensive_hover` come from the drone over the
       radio. `radio_measured_at` is when they were measured.
     """

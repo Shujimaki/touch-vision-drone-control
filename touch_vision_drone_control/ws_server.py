@@ -5,12 +5,13 @@ import logging
 import time
 import weakref
 from collections.abc import Callable, Mapping
-from typing import Any, assert_never
+from pathlib import Path
+from typing import Any, TextIO, assert_never
 
 from aiohttp import WSCloseCode, WSMsgType, web
 from pydantic import ValidationError
 
-from touch_vision_drone_control.drone_connection import DroneConnection, DroneReport, Position
+from touch_vision_drone_control.drone_connection import DroneConnection, DroneReport, Position, Reply as DroneReply
 from touch_vision_drone_control.messages import (
     TABLET_MESSAGE,
     Ack,
@@ -24,6 +25,7 @@ from touch_vision_drone_control.messages import (
     Hello,
     HostConfig,
     Input,
+    NoArgs,
     Point,
     Ranges,
     Reply,
@@ -69,25 +71,69 @@ OPERATOR = web.AppKey("operator", _OperatorSlot)
 SOCKETS = web.AppKey("sockets", weakref.WeakSet)
 
 
+class _MessageLog:
+    def __init__(self, out: TextIO, clock: Callable[[], float], session: str, config_id: str) -> None:
+        self._out = out
+        self._clock = clock
+        self._session = session
+        self._config_id = config_id
+        self._failed = False
+
+    def input(self, raw: Mapping[str, object]) -> None:
+        self._write("input", message=raw)
+
+    def target(self, drone: str, target: Position, reply: DroneReply) -> None:
+        self._write("target", drone=drone, target={"x": target.x, "y": target.y, "z": target.z}, ok=reply.ok)
+
+    def _write(self, kind: str, **fields: object) -> None:
+        line = {"kind": kind, "host_ms": _ms(self._clock()), "session": self._session, "config": self._config_id}
+        try:
+            self._out.write(json.dumps(line | fields) + "\n")
+        except OSError:
+            if not self._failed:
+                _log.exception("skipping message log lines")
+            self._failed = True
+
+
+MESSAGE_LOG = web.AppKey("message_log", _MessageLog)
+
+
 def create_app(
     config: HostConfig,
     drones: DroneConnection,
     session: str,
     clock: Callable[[], float] = time.monotonic,
+    web_app_dir: Path | None = None,
+    log: TextIO | None = None,
 ) -> web.Application:
     """Build the bridge's web application. `clock` is the host monotonic clock, in seconds, shared with `drones`."""
     app = web.Application()
+    message_log = None if log is None else _MessageLog(log, clock, session, config.id)
     app[CONFIG] = config
     app[DRONES] = drones
-    app[SETPOINTS] = SetpointStream(drones, clock, config.input_timeout_ms / 1000)
+    if message_log is not None:
+        app[MESSAGE_LOG] = message_log
+    app[SETPOINTS] = SetpointStream(
+        drones, clock, config.input_timeout_ms / 1000, on_target=None if message_log is None else message_log.target
+    )
     app[CLOCK] = clock
     app[SESSION] = session
     app[OPERATOR] = _OperatorSlot()
     app[SOCKETS] = weakref.WeakSet()
     app.router.add_get("/ws", _handle_socket)
+    if web_app_dir is not None:
+        app.router.add_get("/", _serve_index(web_app_dir / "index.html"))
+        app.router.add_static("/", web_app_dir)
     app.on_shutdown.append(_close_sockets)
     app.cleanup_ctx.append(_stream_setpoints)
     return app
+
+
+def _serve_index(index: Path):
+    async def serve(_: web.Request) -> web.FileResponse:
+        return web.FileResponse(index)
+
+    return serve
 
 
 async def _stream_setpoints(app: web.Application):
@@ -159,6 +205,9 @@ class _Connection:
     async def receive(self, text: str) -> None:
         raw = _json_object(text)
         ref = _seq_of(raw)
+        message_log = self._app.get(MESSAGE_LOG)
+        if message_log is not None and raw is not None and raw.get("type") == "input":
+            message_log.input(raw)
         if raw is None:
             await self._reject_or_close(ref, "not a JSON object")
             return
@@ -196,6 +245,8 @@ class _Connection:
                 await self._reject(ref, "not_allowed", detail, input_stream=isinstance(message, Input))
             case Command(name="takeoff" | "land"):
                 await self._takeoff_or_land(message, ref)
+            case Command(name="stop"):
+                await self._stop(message, ref)
             case Command():
                 await self._reject(ref, "not_allowed", f"{message.name} is not supported yet")
             case Input():
@@ -248,7 +299,20 @@ class _Connection:
         if refused:
             await self._reject(ref, "not_allowed", "; ".join(refused))
             return
-        await self._send(Reply(seq=self._next_seq(), host_ms=self._host_ms(), ref=ref, ok=True, code=None, detail=None))
+        await self._accept(ref)
+
+    async def _stop(self, command: Command, ref: int) -> None:
+        try:
+            NoArgs.model_validate(command.args)
+        except ValidationError as error:
+            await self._reject(ref, "invalid", f"args.{_first_error(error)}")
+            return
+        self._app[SETPOINTS].release_and_lock()
+        reply = self._app[DRONES].stop()
+        if not reply.ok:
+            await self._reject(ref, "not_allowed", str(reply.reason))
+            return
+        await self._accept(ref)
 
     async def _welcome(self, hello: Hello, ref: int) -> None:
         if hello.role == "operator" and not self._app[OPERATOR].claim(self):
@@ -309,6 +373,9 @@ class _Connection:
             _log.exception("skipping telemetry ticks: %s", what)
         self._failure = what
 
+    async def _accept(self, ref: int) -> None:
+        await self._send(Reply(seq=self._next_seq(), host_ms=self._host_ms(), ref=ref, ok=True, code=None, detail=None))
+
     async def _reject(self, ref: int | None, code: ReplyCode, detail: str, input_stream: bool = False) -> None:
         if input_stream and not self._input_reply_due(code):
             return
@@ -343,7 +410,7 @@ class _Connection:
         return self._seq
 
     def _host_ms(self) -> float:
-        return round(self._app[CLOCK]() * 1000, 1)
+        return _ms(self._app[CLOCK]())
 
 
 def _telemetry(
@@ -356,7 +423,7 @@ def _telemetry(
 ) -> Telemetry:
     return Telemetry(
         seq=seq,
-        host_ms=round(now_s * 1000, 1),
+        host_ms=_ms(now_s),
         ack=ack,
         mode="course",
         trial=None,
@@ -389,6 +456,10 @@ def _in_allowed_area(x: float, y: float, course: Course) -> bool:
     in_volume = volume.x_min - tol <= x <= volume.x_max + tol and volume.y_min - tol <= y <= volume.y_max + tol
     in_zone = zone.x_min + tol < x < zone.x_max - tol and zone.y_min + tol < y < zone.y_max - tol
     return in_volume and not in_zone
+
+
+def _ms(seconds: float) -> float:
+    return round(seconds * 1000, 1)
 
 
 def _v1_length(meters: float) -> float:

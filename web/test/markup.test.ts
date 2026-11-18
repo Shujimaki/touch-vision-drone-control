@@ -27,3 +27,24 @@ describe("mockup page", () => {
     for (const banned of ["WebSocket", "fetch(", "XMLHttpRequest", "serviceWorker", "setInterval"]) expect(all, banned).not.toContain(banned);
   });
 });
+
+describe("flight test page", () => {
+  const page = readFileSync(join(web, "flight-test.html"), "utf8");
+  const pageScript = readFileSync(join(web, "src", "flightTest.ts"), "utf8");
+  const pageIds = [...page.matchAll(/\bid="([^"]+)"/g)].map(m => m[1]!);
+
+  it("has every element its script looks up by a fixed id", () => {
+    const used = [...pageScript.matchAll(/byId(?:<[^>]+>)?\("([^"]+)"\)/g)].map(m => m[1]!);
+    expect(used.length).toBeGreaterThan(0);
+    for (const id of used) expect(pageIds, `#${id}`).toContain(id);
+  });
+  it("uses each id once", () => {
+    expect(pageIds.filter((id, i) => pageIds.indexOf(id) !== i)).toEqual([]);
+  });
+  it("runs no script except its own", () => {
+    expect([...page.matchAll(/<script\b[^>]*>/g)].map(m => m[0])).toEqual(['<script type="module" src="/src/flightTest.ts">']);
+  });
+  it("uses no socket, request, or timer API directly", () => {
+    for (const banned of ["WebSocket", "fetch(", "XMLHttpRequest", "serviceWorker", "setInterval"]) expect(pageScript, banned).not.toContain(banned);
+  });
+});
