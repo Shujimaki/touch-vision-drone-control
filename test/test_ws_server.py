@@ -21,7 +21,9 @@ from touch_vision_drone_control.mock_drone_connection import MockDroneConnection
 from touch_vision_drone_control.ws_server import create_app
 
 TEST_CONFIG = PLACEHOLDER_CONFIG.model_copy(update={"id": "test-config", "input_timeout_ms": 123.0, "drones": ["cf7"]})
-INPUT = example("input-three-drones-climbing")
+INPUT = example(
+    "input-three-drones-climbing", held=[], gesture={"state": "idle", "rate": 0.0, "neutral_y": None}, frames=[]
+)
 
 
 class FakeClock:
