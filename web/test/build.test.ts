@@ -1,6 +1,6 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, relative } from "node:path";
+import { dirname, extname, join, relative, sep } from "node:path";
 import { build } from "vite";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -11,6 +11,10 @@ const ASSET_REFERENCES: Record<string, RegExp[]> = {
   ".css": [/url\(\s*["']?([^"')]+)["']?\s*\)/g, /@import\s+["']([^"']+)["']/g],
   ".js": [/\bimport\s*(?:[\w*{}\s,$]+from\s*)?["']([^"']+)["']/g, /\bimport\(\s*["']([^"']+)["']\s*\)/g, /new URL\(\s*["']([^"']+)["']/g],
 };
+
+// scripts/setup-mediapipe.mjs copies the pinned MediaPipe runtime and model here. They are third-party binaries and
+// loaders whose comments and strings hold URLs that are never requested, so the checks below skip them.
+const MEDIAPIPE_RUNTIME = "mediapipe";
 
 let builtFiles: { file: string; text: string }[] = [];
 
@@ -26,6 +30,7 @@ beforeAll(async () => {
     await build({ root: web, logLevel: "silent", build: { outDir, emptyOutDir: true } });
     builtFiles = readdirSync(outDir, { withFileTypes: true, recursive: true }).filter(e => e.isFile())
       .map(e => join(e.parentPath, e.name))
+      .filter(path => relative(outDir, path).split(sep)[0] !== MEDIAPIPE_RUNTIME)
       .map(path => ({ file: relative(outDir, path), text: [".png", ".ico"].includes(extname(path)) ? "" : readFileSync(path, "utf8") }));
   } finally {
     rmSync(outDir, { recursive: true, force: true });
