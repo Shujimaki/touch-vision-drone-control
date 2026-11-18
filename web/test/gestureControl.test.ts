@@ -57,8 +57,17 @@ describe("gesture control", () => {
   it("holds altitude on hand loss and needs a fresh open palm", () => {
     const c = make();
     activate(c);
-    expect(c.update(noHand, 600)).toMatchObject({ mode: "hand_loss", rateMps: 0, neutralY: null });
-    expect(c.update(palm(0.5), 700).mode).toBe("confirming");
+    expect(c.update(noHand, 600)).toMatchObject({ mode: "unrecognized", rateMps: 0, neutralY: 0.5 });
+    expect(c.update(noHand, 900)).toMatchObject({ mode: "hand_loss", rateMps: 0, neutralY: null });
+    expect(c.update(palm(0.5), 1000).mode).toBe("confirming");
+  });
+
+  it("rides out a short tracking blip without a new activation", () => {
+    const c = make();
+    activate(c);
+    c.update(noHand, 600);
+    c.update(noHand, 800); // under 300 ms
+    expect(c.update(palm(0.5), 850)).toMatchObject({ mode: "active", neutralY: 0.5 });
   });
 
   it("pauses on an unclear pose and keeps the neutral point", () => {

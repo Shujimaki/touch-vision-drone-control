@@ -9,6 +9,7 @@ export interface GestureControlConfig {
   minConfidence?: number;
   confirmMs?: number;
   stillThreshold?: number;
+  handLossMs?: number;
 }
 
 export interface GestureControlState {
@@ -27,6 +28,7 @@ export class GestureController {
   private confirmY: number | null = null;
   private wristSamples: number[] = [];
   private lastMs = 0;
+  private missingSinceMs: number | null = null;
   private readonly config: Required<GestureControlConfig>;
 
   constructor(config: GestureControlConfig) {
@@ -34,7 +36,8 @@ export class GestureController {
       ...config,
       minConfidence: config.minConfidence ?? 0.5,
       confirmMs: config.confirmMs ?? 500,
-      stillThreshold: config.stillThreshold ?? 0.04
+      stillThreshold: config.stillThreshold ?? 0.04,
+      handLossMs: config.handLossMs ?? 300
     };
 
     // makes sure the rate and wrist movement settings are valid
@@ -45,7 +48,8 @@ export class GestureController {
       this.config.minConfidence < 0 ||
       this.config.minConfidence > 1 ||
       this.config.confirmMs < 0 ||
-      this.config.stillThreshold < 0
+      this.config.stillThreshold < 0 ||
+      this.config.handLossMs < 0
     ) {
       throw new Error("Invalid gesture control settings.");
     }
@@ -60,12 +64,21 @@ export class GestureController {
       this.clearConfirmation();
       this.wristSamples = [];
 
-      // lost the hand mid-control; hold altitude till a fresh open palm
+      // lost the hand mid-control; hold altitude right away
       if (
         this.mode === "active" ||
         this.mode === "unrecognized" ||
         this.mode === "hand_loss"
       ) {
+        this.missingSinceMs ??= tMs;
+
+        // a short blip just pauses, like an unclear pose
+        if (this.mode !== "hand_loss" && tMs - this.missingSinceMs < this.config.handLossMs) {
+          this.mode = "unrecognized";
+          return this.state(0);
+        }
+
+        // gone long enough; needs a fresh open palm
         this.mode = "hand_loss";
         this.neutralY = null;
       } else if (this.mode !== "locked") {
@@ -75,6 +88,8 @@ export class GestureController {
 
       return this.state(0);
     }
+
+    this.missingSinceMs = null; // hand is back
 
     const confident = result.score !== null &&
       result.score >= this.config.minConfidence;
@@ -150,6 +165,7 @@ export class GestureController {
   reset(): void {
     this.mode = "idle";
     this.neutralY = null;
+    this.missingSinceMs = null;
     this.clearConfirmation();
     this.wristSamples = [];
   }

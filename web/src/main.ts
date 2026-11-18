@@ -396,6 +396,7 @@ async function toggleCamera(): Promise<void> {
       minConfidence: 0.5, // only use a confident gesture
       confirmMs: 500, // hold palm steady before control starts
       stillThreshold: 0.04, // restart if the wrist moves during confirmation
+      handLossMs: 300, // hand gone this long counts as hand loss (ADR 0010)
       deadBand: 0.03, // ignore tiny wrist movements
       fullRateDisplacement: 0.18 // reach max speed after about 18% of the image
     });
