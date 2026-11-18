@@ -13,17 +13,18 @@ The interface responds to the operator, but only on screen. It is online at <htt
 - **Video:** the feed follows the drone touched most recently while it is held. The buttons 1, 2 and 3 also choose it, and show each drone's battery and signal.
 - **Selected drone:** the Take off / Land button, the held-altitude list, the altitude bars, and the Telemetry tables follow what the operator holds and moves.
 - **Telemetry tab:** the event log filters by participant session, then by trial.
+- **Take off and Land:** while connected, the selected drone's button sends `takeoff` or `land` for that drone. Take off all and Land all send nothing yet. The video header and the Telemetry table show each drone's flight state from telemetry. Only a flying drone can be dragged.
 - **E-STOP:** press and hold for 1 s to see it arm and fire. Take off all resets it.
 - **Hand camera:** the camera icon shows a plain preview of the front camera.
 - **Settings:** the flight-value steppers, Light mode, Left-handed layout, and Fullscreen.
 
 ## What it does not do
 
-Nothing is simulated. The only messages are the connection handshake and telemetry:
+The tablet simulates nothing itself. The only messages are the connection handshake, takeoff and land commands, and telemetry:
 
-- no flight, altitude change, sensor readings, collisions, or defensive hover;
+- no drag that moves a drone, no altitude change, sensor readings, collisions, or defensive hover;
 - no gesture recognition, and no trials that start or end;
-- no input or commands yet. The page shows the connection state in the map's top-right corner. It draws each drone entity at its measured position from telemetry. The other panels still show the sample data.
+- no input yet, and no stop or trial commands. The page shows the connection state in the map's top-right corner. It draws each drone entity at its measured position from telemetry. The other panels still show the sample data.
 
 Without a bridge, a dragged drone moves only on the map. Its sample sensor readings belong to its starting spot, so they clear once it moves.
 

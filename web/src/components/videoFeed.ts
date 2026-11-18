@@ -3,6 +3,7 @@
 import { U, batteryLevel } from "../format";
 import type { Pal } from "../theme";
 import type { Drone } from "../sample";
+import type { FlightState } from "../protocol";
 
 export const feedTile = (d: Drone): string => `<div class="dfeed" data-f="${d.id}" role="img" aria-label="${U(d.id)} video">
     <span class="fh"><span class="num">${d.n}</span>${U(d.id)}<span class="st" id="fst-${d.id}">--</span></span>
@@ -10,9 +11,10 @@ export const feedTile = (d: Drone): string => `<div class="dfeed" data-f="${d.id
     <span class="fstat"><span class="lnk">LINK OK</span>
       <span class="bat" id="fbat-${d.id}" title="Battery"><i></i></span><span class="m" id="fbatv-${d.id}">--</span></span></div>`;
 
-// Grounded, moving (heading for a target or climbing while held) or hovering, with its colour key
+const NAMES: Record<Exclude<FlightState, "flying">, string> = { grounded: "Grounded", taking_off: "Taking off", landing: "Landing", stopped: "Stopped" };
+
 export function flightState(d: Drone, rate: number): [string, "" | "ok" | "own"] {
-  if (d.z <= 0.02) return ["Grounded", ""];
+  if (d.state !== "flying") return [NAMES[d.state], d.state === "grounded" ? "" : "own"];
   const moving = Math.hypot(d.tx - d.x, d.ty - d.y) > 0.03 || (d.held && rate !== 0);
   return moving ? ["Moving", "own"] : ["Hovering", "ok"];
 }

@@ -24,6 +24,14 @@ describe("applyTelemetry", () => {
     expect([cf1.x, cf1.y, cf1.z, cf1.tx, cf1.ty, cf1.stale]).toEqual([1.184, 0.851, 0.742, 1.2, 0.85, false]);
   });
 
+  it("gives each drone entity its flight state from telemetry", () => {
+    const drones = sampleDrones();
+
+    applyTelemetry(drones, withDrone("cf3", { state: "taking_off" }), STALE_MS);
+
+    expect(drones.map(d => d.state)).toEqual(["flying", "flying", "taking_off"]);
+  });
+
   it("leaves the target marker of a held drone where the finger put it", () => {
     const drones = sampleDrones();
     const cf1 = drones[0]!;

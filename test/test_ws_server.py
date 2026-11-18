@@ -289,14 +289,152 @@ async def test_input_and_events_from_an_experimenter_get_not_allowed(connect, me
     assert (reply["ref"], reply["code"]) == (2, "not_allowed")
 
 
-async def test_commands_are_not_supported_yet(connect) -> None:
+def command(name: str, seq: int, drones: list[str] | None = None) -> dict:
+    args = {} if drones is None else {"drones": drones}
+    return example("command-takeoff", seq=seq, name=name, args=args)
+
+
+async def telemetry_until(ws, clock, state: str) -> dict:
+    while True:
+        telemetry = await receive_telemetry(ws)
+        drone = telemetry["drones"][0]
+        if telemetry["host_ms"] >= round(clock.s * 1000, 1) and drone["state"] == state:
+            return drone
+
+
+async def test_takeoff_gets_ok_and_the_drone_climbs_to_flying(connect, clock) -> None:
     ws = await connect()
     await say_hello(ws)
 
-    await ws.send_json(example("command-takeoff", seq=2))
+    await ws.send_json(command("takeoff", 2, ["cf7"]))
     reply = await receive_reply(ws)
 
-    assert (reply["ref"], reply["code"]) == (2, "not_allowed")
+    assert reply == {**reply, "type": "reply", "ref": 2, "ok": True, "code": None, "detail": None}
+    assert (await telemetry_until(ws, clock, "taking_off"))["z"] == 0.0
+    clock.s += 1.0
+    flying = await telemetry_until(ws, clock, "flying")
+    assert (flying["x"], flying["y"], flying["z"]) == (1.5, 2.0, 0.5)
+
+
+async def test_a_drone_that_reaches_flying_is_held_where_it_arrived(connect, clock) -> None:
+    ws = await connect()
+    await say_hello(ws)
+    await ws.send_json(command("takeoff", 2, ["cf7"]))
+    await receive_reply(ws)
+
+    clock.s += 1.0
+    flying = await telemetry_until(ws, clock, "flying")
+    clock.s += 5.0
+
+    assert (await telemetry_until(ws, clock, "flying"))["z"] == 0.5
+    assert flying["cmd"] == {"x": 1.5, "y": 2.0, "z": 0.5}
+
+
+async def test_land_gets_ok_and_the_drone_descends_to_grounded(connect, clock) -> None:
+    ws = await connect()
+    await say_hello(ws)
+    await ws.send_json(command("takeoff", 2, ["cf7"]))
+    await receive_reply(ws)
+    clock.s += 1.0
+    await telemetry_until(ws, clock, "flying")
+
+    await ws.send_json(command("land", 3, ["cf7"]))
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["ok"], reply["code"]) == (3, True, None)
+    assert (await telemetry_until(ws, clock, "landing"))["z"] == 0.5
+    clock.s += 1.0
+    grounded = await telemetry_until(ws, clock, "grounded")
+    assert (grounded["z"], grounded["cmd"]) == (0.0, {"x": 1.5, "y": 2.0, "z": 0.0})
+
+
+async def test_a_command_naming_a_drone_not_in_the_configuration_gets_unknown_drone(connect, clock) -> None:
+    ws = await connect()
+    await say_hello(ws)
+
+    await ws.send_json(command("takeoff", 2, ["cf7", "cf9"]))
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["ok"], reply["code"], reply["detail"]) == (2, False, "unknown_drone", "cf9")
+    assert (await telemetry_until(ws, clock, "grounded"))["z"] == 0.0
+
+
+async def test_land_while_grounded_gets_not_allowed_with_a_detail(connect) -> None:
+    ws = await connect()
+    await say_hello(ws)
+
+    await ws.send_json(command("land", 2, ["cf7"]))
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["ok"], reply["code"], reply["detail"]) == (2, False, "not_allowed", "cf7: not_airborne")
+
+
+async def test_takeoff_while_flying_gets_not_allowed_and_the_drone_keeps_flying(connect, clock) -> None:
+    ws = await connect()
+    await say_hello(ws)
+    await ws.send_json(command("takeoff", 2, ["cf7"]))
+    await receive_reply(ws)
+    clock.s += 1.0
+    await telemetry_until(ws, clock, "flying")
+
+    await ws.send_json(command("takeoff", 3, ["cf7"]))
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["code"], reply["detail"]) == (3, "not_allowed", "cf7: not_grounded")
+    assert (await telemetry_until(ws, clock, "flying"))["z"] == 0.5
+
+
+async def test_a_command_that_some_drones_refuse_gets_not_allowed_and_the_rest_still_move(aiohttp_client, clock) -> None:
+    config = TEST_CONFIG.model_copy(update={"drones": ["cf7", "cf8"]})
+    drones = MockDroneConnection(config.drones, clock=clock)
+    client = await aiohttp_client(create_app(config, drones, session="s-test", clock=clock))
+    ws = await client.ws_connect("/ws", timeout=ClientWSTimeout(ws_receive=2))
+    await say_hello(ws)
+    await ws.send_json(command("takeoff", 2, ["cf8"]))
+    await receive_reply(ws)
+
+    await ws.send_json(command("takeoff", 3, ["cf7", "cf8"]))
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["ok"], reply["code"], reply["detail"]) == (3, False, "not_allowed", "cf8: not_grounded")
+    assert [d["state"] for d in (await receive_telemetry(ws))["drones"]] == ["taking_off", "taking_off"]
+
+
+@pytest.mark.parametrize(
+    "args",
+    [{}, {"drones": "cf7"}, {"drones": []}, {"drones": ["cf7", "cf7"]}, {"drones": ["cf7"], "extra": 1}],
+)
+async def test_takeoff_with_malformed_args_gets_invalid_and_nothing_moves(connect, clock, args) -> None:
+    ws = await connect()
+    await say_hello(ws)
+
+    await ws.send_json(command("takeoff", 2) | {"args": args})
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["ok"], reply["code"]) == (2, False, "invalid")
+    assert (await telemetry_until(ws, clock, "grounded"))["z"] == 0.0
+
+
+async def test_an_experimenter_can_take_off_a_drone(connect, clock) -> None:
+    ws = await connect()
+    await say_hello(ws, role="experimenter")
+
+    await ws.send_json(command("takeoff", 2, ["cf7"]))
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["ok"], reply["code"]) == (2, True, None)
+    assert (await telemetry_until(ws, clock, "taking_off"))["id"] == "cf7"
+
+
+@pytest.mark.parametrize("name", ["stop", "stop_reset", "set_mode", "trial_start", "trial_end"])
+async def test_other_commands_are_not_supported_yet(connect, name) -> None:
+    ws = await connect()
+    await say_hello(ws)
+
+    await ws.send_json(command(name, 2))
+    reply = await receive_reply(ws)
+
+    assert (reply["ref"], reply["code"], reply["detail"]) == (2, "not_allowed", f"{name} is not supported yet")
 
 
 async def test_input_replies_are_limited_to_one_each_second_for_each_code(connect, clock) -> None:

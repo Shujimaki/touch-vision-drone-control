@@ -84,6 +84,16 @@ class Command(_Strict):
     args: dict[str, Any]
 
 
+class DronesArgs(_Strict):
+    drones: Annotated[list[str], Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def _distinct(self) -> "DronesArgs":
+        if len(set(self.drones)) != len(self.drones):
+            raise ValueError("a drone name repeats")
+        return self
+
+
 TabletMessage = Annotated[Hello | Input | Event | Command, Field(discriminator="type")]
 TABLET_MESSAGE: TypeAdapter[TabletMessage] = TypeAdapter(TabletMessage)
 """Parses one tablet message from JSON text. Raises `pydantic.ValidationError` when it does not match the format."""
