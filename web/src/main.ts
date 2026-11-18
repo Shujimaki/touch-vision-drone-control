@@ -98,7 +98,9 @@ const gesture: Gesture = live === null
       ? "confirming"
       : live.mode === "unrecognized"
         ? "unrecognized"
-        : live.mode === "waiting"
+        : live.mode === "hand_loss"
+          ? "lost"
+        : live.mode === "idle"
           ? "idle"
           : live.rateMps < 0
             ? "descend"
