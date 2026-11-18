@@ -15,6 +15,19 @@ export interface Command {
   name: FlightCommand; args: { drones: string[] };
 }
 
+export interface Held { id: string; x: number; y: number; touch_ms: number; follow: boolean }
+
+export type GestureState = "idle" | "confirming" | "active" | "locked" | "hand_loss" | "unrecognized";
+
+export interface Frame { t_ms: number; label: string | null; score: number | null; wrist_x: number | null; wrist_y: number | null }
+
+export interface Input {
+  type: "input"; v: 1; seq: number; t_ms: number;
+  rtt_ms: number | null; held: Held[];
+  gesture: { state: GestureState; rate: number; neutral_y: number | null };
+  frames: Frame[];
+}
+
 export interface Rect { x_min: number; x_max: number; y_min: number; y_max: number }
 
 export interface HostConfig {

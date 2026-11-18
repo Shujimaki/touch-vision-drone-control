@@ -32,3 +32,13 @@ export function dragTarget(ax: number, ay: number, bx: number, by: number, z: Co
   const len = Math.hypot(bx - ax, by - ay), s = Math.max(0, t - (len > 0 ? GAP / len : 0));
   return { x: ax + (bx - ax) * s, y: ay + (by - ay) * s, blocked: true };
 }
+
+export interface AcceptedTarget { x: number; y: number; blocked: boolean }
+
+export function acceptedTarget(
+  target: { x: number; y: number }, drone: { x: number; y: number } | null, fx: number, fy: number, z: Course["zone"],
+): AcceptedTarget {
+  const aim = dragTarget(target.x, target.y, fx, fy, z);
+  const path = drone ? dragTarget(drone.x, drone.y, aim.x, aim.y, z) : aim;
+  return { x: path.x, y: path.y, blocked: aim.blocked || path.blocked };
+}
