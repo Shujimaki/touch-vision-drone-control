@@ -7,6 +7,7 @@ export interface GestureFrameResult {
   score: number | null;
   wristX: number | null;
   wristY: number | null;
+  landmarks?: { x: number; y: number }[] | null; // all 21 hand points, for drawing the skeleton
 }
 
 // messages from the page to the worker; either initialization or frame-processing

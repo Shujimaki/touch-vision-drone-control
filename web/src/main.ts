@@ -8,7 +8,7 @@ import { PAL, type Pal } from "./theme";
 import { U, batteryLevel, clamp, fmtMS, sg } from "./format";
 import { TRAIL_MS, courseLayer, droneLayer, fitView, toCourse, type View } from "./components/map";
 import { altitudeBars } from "./components/altitude";
-import { handFrame } from "./components/handCamera";
+import { BONES, handFrame } from "./components/handCamera";
 import { batteryClass, batteryWidth, feedScene, feedTile, flightState } from "./components/videoFeed";
 import { altitudeCard, dronesTable, healthTable, logView, trialCard } from "./components/telemetry";
 import { gestureStatus, heldAltitude } from "./components/panel";
@@ -21,6 +21,7 @@ import { GestureController, type GestureControlState } from "./gestureControl";
 import { FpsMeter } from "./fpsMeter";
 import type { Frame, Telemetry } from "./protocol";
 import type { GestureReading } from "./connection";
+import type { GestureFrameResult } from "./gestureMessages";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -326,14 +327,45 @@ function cameraNote(text: string, ok = false): void {
 }
 
 // dashed neutral line and dead band over the live video
-function renderOverlay(control: GestureControlState | null): void {
-  const o = byId("camOverlay");
+// readable names for the mediapipe labels
+const LABEL_NAME: Record<string, string> = { Open_Palm: "Open Palm", Closed_Fist: "Closed Fist" };
+
+// hand skeleton, label and neutral line drawn over the live video
+function renderOverlay(control: GestureControlState | null, result: GestureFrameResult | null = null): void {
+  const o = byId("camOverlay"), video = byId<HTMLVideoElement>("camVideo");
+
+  // match the video's own size so the points line up (object-fit: cover)
+  const W = video.videoWidth || 320, H = video.videoHeight || 240, u = H / 240;
+  o.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const mirror = video.classList.contains("mirror");
+  const px = (x: number) => (mirror ? 1 - x : x) * W;
+  let s = "";
+
   const ny = control?.neutralY;
-  if (ny == null) { o.innerHTML = ""; return; }
-  const y = ny * 240, dz = 0.03 * 240;
-  o.innerHTML = `<rect x="0" y="${y - dz}" width="320" height="${2 * dz}" fill="#fff" fill-opacity=".08"/>` +
-    `<line x1="0" y1="${y}" x2="320" y2="${y}" stroke="#fff" stroke-opacity=".8" stroke-dasharray="4 4"/>` +
-    `<text x="314" y="${y - dz - 4}" fill="#fff" font-size="9" text-anchor="end">neutral</text>`;
+  if (ny != null) {
+    const y = ny * H, dz = 0.03 * H;
+    s += `<rect x="0" y="${y - dz}" width="${W}" height="${2 * dz}" fill="#fff" fill-opacity=".08"/>` +
+      `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="#fff" stroke-opacity=".8" stroke-dasharray="${4 * u} ${4 * u}"/>` +
+      `<text x="${W - 6 * u}" y="${y - dz - 4 * u}" fill="#fff" font-size="${9 * u}" text-anchor="end">neutral</text>`;
+  }
+
+  const pts = result?.landmarks;
+  if (pts && pts.length === 21) {
+    const p = pts.map(q => [px(q.x), q.y * H] as const);
+    s += `<g stroke="${K.own}" stroke-width="${1.5 * u}" stroke-linecap="round">` +
+      BONES.map(([a, b]) => `<line x1="${p[a]![0]}" y1="${p[a]![1]}" x2="${p[b]![0]}" y2="${p[b]![1]}"/>`).join("") + `</g>`;
+    s += p.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${2.2 * u}" fill="${K.friend}"/>`).join("");
+
+    // label and score above the hand
+    const name = (result!.label && LABEL_NAME[result!.label]) ?? "Unrecognized";
+    const score = result!.score === null ? "" : ` ${Math.round(result!.score * 100)}%`;
+    const xs = p.map(q => q[0]), top = Math.min(...p.map(q => q[1])) - 10 * u;
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2, text = name + score, w = (text.length * 6.3 + 12) * u;
+    s += `<rect x="${cx - w / 2}" y="${top - 16 * u}" width="${w}" height="${18 * u}" fill="#111" fill-opacity=".85"/>` +
+      `<text x="${cx}" y="${top - 3 * u}" fill="${K.sel}" font-size="${11 * u}" text-anchor="middle">${text}</text>`;
+  }
+
+  o.innerHTML = s;
 }
 
 // what each mode change says in the event log
@@ -420,7 +452,7 @@ async function toggleCamera(): Promise<void> {
         const control = ui.gestureController!.update(result, tMs);
         logMode(ui.liveControl?.mode, control.mode);
         ui.liveControl = control;
-        renderOverlay(control);
+        renderOverlay(control, result);
         renderSoon();
           console.log("MediaPipe:", result, "Gesture control:", control);
       },

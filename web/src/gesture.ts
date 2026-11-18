@@ -57,7 +57,8 @@ export function readGestureFrame(
       label: gesture?.categoryName ?? null, // name of gesture
       score: gesture?.score?? null, // model's confidence score of gesture
       wristX: hand?.[0]?.x ?? null, // wrist x, needed in the frames sent to the bridge
-      wristY: hand?.[0]?.y ?? null // get first landmark of hand (wrist) and its y coordinate, if no hand detected ? null
+      wristY: hand?.[0]?.y ?? null, // get first landmark of hand (wrist) and its y coordinate, if no hand detected ? null
+      landmarks: hand ? hand.map(p => ({ x: p.x, y: p.y })) : null // every hand point, for the skeleton
     };
 }
 
