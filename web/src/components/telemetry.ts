@@ -27,10 +27,12 @@ export function dronesTable(drones: Drone[], trig: number, show: number): string
 }
 
 const GESTURE_NAME: Record<Gesture, string> = { idle: "Idle", confirming: "Confirming", climb: "Active", descend: "Active", locked: "Locked", lost: "Hand lost", unrecognized: "Unrecognised pose" };
-export const altitudeCard = (g: Gesture, requested: number, applied: number, z: { min: number; max: number }, rateMax: number): string =>
-  `<dt>Gesture state</dt><dd>${GESTURE_NAME[g]}</dd><dt>Source</dt><dd>Hand camera</dd>
-   <dt>Requested rate</dt><dd>${sg(requested)} m/s</dd><dt>Applied rate</dt><dd>${sg(applied)} m/s</dd>
-   <dt>Paused by</dt><dd>--</dd><dt>Limits</dt><dd>${z.min.toFixed(2)}–${z.max.toFixed(2)} m, max ${rateMax.toFixed(2)} m/s</dd>`;
+// requested comes from the tablet; applied and paused by come from the bridge (null = no bridge)
+export interface AltitudeReadout { gesture: Gesture; source: string; requested: number; applied: number | null; pausedBy: string | null }
+export const altitudeCard = (a: AltitudeReadout, z: { min: number; max: number }, rateMax: number): string =>
+  `<dt>Gesture state</dt><dd>${GESTURE_NAME[a.gesture]}</dd><dt>Source</dt><dd>${a.source}</dd>
+   <dt>Requested rate</dt><dd>${sg(a.requested)} m/s</dd><dt>Applied rate</dt><dd>${a.applied === null ? "--" : `${sg(a.applied)} m/s`}</dd>
+   <dt>Paused by</dt><dd>${a.pausedBy ?? "--"}</dd><dt>Limits</dt><dd>${z.min.toFixed(2)}–${z.max.toFixed(2)} m, max ${rateMax.toFixed(2)} m/s</dd>`;
 
 export const trialCard = (t: { id: string; running: boolean; dh: number; restrict: number }, elapsed: number, limit: number): string =>
   `<dt>Trial</dt><dd>${t.id}</dd><dt>Restricted zone</dt><dd>Blocking drags</dd>

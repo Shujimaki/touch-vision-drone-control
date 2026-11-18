@@ -4,7 +4,7 @@ import { PAL, threatColor } from "../src/theme";
 import { U, batteryLevel, fmtMS, fmtT } from "../src/format";
 import { courseLayer, droneEntity, fitView, toCourse } from "../src/components/map";
 import { altitudeBars } from "../src/components/altitude";
-import { dronesTable, logView, RANGE_COLS } from "../src/components/telemetry";
+import { altitudeCard, dronesTable, logView, RANGE_COLS } from "../src/components/telemetry";
 import { gestureStatus, heldAltitude } from "../src/components/panel";
 import { flightState } from "../src/components/videoFeed";
 import { dragTarget } from "../src/zone";
@@ -181,5 +181,14 @@ describe("stale drone entity", () => {
 
     expect(droneEntity({ ...d1!, stale: true }, COURSE, view, K, R)).toMatch(/^<g opacity="0.35">/);
     expect(droneEntity(d1!, COURSE, view, K, R)).not.toContain('opacity="0.35"');
+  });
+});
+
+describe("altitude card", () => {
+  it("shows the requested rate from the tablet and no applied rate without a bridge", () => {
+    const card = altitudeCard({ gesture: "climb", source: "Hand camera, 24 fps", requested: 0.12, applied: null, pausedBy: null }, { min: 0.5, max: 1.44 }, 0.2);
+    expect(card).toContain("Hand camera, 24 fps");
+    expect(card).toContain("<dt>Applied rate</dt><dd>--</dd>");
+    expect(card).toContain("<dt>Paused by</dt><dd>--</dd>");
   });
 });

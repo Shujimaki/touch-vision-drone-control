@@ -19,7 +19,7 @@ import { applyTelemetry } from "./droneEntities";
 import { startGestureClient, type GestureClient } from "./gestureClient";
 import { GestureController, type GestureControlState } from "./gestureControl";
 import { FpsMeter } from "./fpsMeter";
-import type { Frame } from "./protocol";
+import type { Frame, Telemetry } from "./protocol";
 import type { GestureReading } from "./connection";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
@@ -51,6 +51,8 @@ let link: ConnectionState = { status: "connecting" };
 const log = sampleLog();
 const gestureFps = new FpsMeter(); // measures gesture results per second
 let gestureFrames: Frame[] = []; // frames since the last input, for the trial records
+let gestureFpsNow = 0; // latest fps, for the telemetry card
+let bridgeAltitude: Telemetry["altitude"] | null = null; // what the bridge applied, from telemetry
 
 // what the altitude channel sends on each input tick
 function gestureReading(): GestureReading {
@@ -100,10 +102,10 @@ function renderFeeds(): void {
   document.querySelectorAll<HTMLElement>("[data-fs]").forEach(b => b.setAttribute("aria-checked", String(b.dataset["fs"] === ui.video)));
 }
 
-function renderPanel(): void {
-const held = heldDrones();
+// the live gesture as the panel and the telemetry card name it; sample data while the camera is off
+function shownGesture(): Gesture {
 const live = ui.liveControl;
-const gesture: Gesture = live === null
+return live === null
   ? SAMPLE.gesture
   : live.mode === "locked"
     ? "locked"
@@ -118,6 +120,12 @@ const gesture: Gesture = live === null
           : live.rateMps < 0
             ? "descend"
             : "climb";
+}
+
+function renderPanel(): void {
+const held = heldDrones();
+const live = ui.liveControl;
+const gesture = shownGesture();
 const rate = live === null ? SAMPLE.appliedRate : live.rateMps;
 const pct = live?.mode === "confirming" ? Math.round(live.confirmProgress * 100) : undefined;
 const gs = gestureStatus(gesture, held, rate, pct);  byId("gstat").dataset["k"] = gs.k; byId("gMain").textContent = gs.main; byId("gSub").textContent = gs.sub;
@@ -143,7 +151,15 @@ const gs = gestureStatus(gesture, held, rate, pct);  byId("gstat").dataset["k"] 
 function renderTelemetry(): void {
   const s = ui.settings, elapsed = SAMPLE.now - SAMPLE.trial.t0;
   byId("telTable").innerHTML = dronesTable(ui.drones, s.dhtrig, 0.60);
-  byId("telAlt").innerHTML = altitudeCard(SAMPLE.gesture, SAMPLE.requestedRate, SAMPLE.appliedRate, { min: s.zmin, max: s.zmax }, s.rate);
+  const live = ui.liveControl, alt = bridgeAltitude;
+  byId("telAlt").innerHTML = altitudeCard({
+    gesture: shownGesture(),
+    source: live ? `Hand camera, ${gestureFpsNow} fps` : "Sample data",
+    requested: live ? live.rateMps : SAMPLE.requestedRate,
+    // the bridge decides what's applied; no bridge means no applied rate
+    applied: alt ? alt.rate : live ? null : SAMPLE.appliedRate,
+    pausedBy: alt?.blocked_by ? `${alt.blocked_by}${alt.reason ? `, ${alt.reason}` : ""}` : null,
+  }, { min: s.zmin, max: s.zmax }, s.rate);
   byId("telTrial").innerHTML = trialCard({ ...SAMPLE.trial, restrict: ui.restrict }, elapsed, s.tlim);
   byId("telHealth").innerHTML = healthTable(ui.drones);
   const lv = logView(log, trials, SAMPLE.sessions, { session: ui.logSes, trial: ui.logTrial }, SAMPLE.now, s.tlim);
@@ -389,6 +405,7 @@ async function toggleCamera(): Promise<void> {
       onResult: (result, tMs) => {
         const now = performance.now();
         const fps = gestureFps.tick(now);
+        gestureFpsNow = fps;
         const frameMs = now - tMs; // time from sending the frame to getting its result
         cameraNote(`${fps} FPS · ${frameMs.toFixed(0)} ms per frame`, fps >= 15); // so2 wants 15 fps or more
 
@@ -490,9 +507,10 @@ const bridge = connect({
     for (const id of applyTelemetry(ui.drones, t, link.welcome.config.stale_position_ms)) {
       if (!unknownDrones.has(id)) { unknownDrones.add(id); console.warn(`telemetry names ${id}, which the map has no drone entity for`); }
     }
+    bridgeAltitude = t.altitude;
     ui.telemetrySeen = true; renderSoon();
   },
-  onHostLost: releaseAll,
+  onHostLost: () => { bridgeAltitude = null; releaseAll(); },
   gesture: gestureReading,
 });
 
