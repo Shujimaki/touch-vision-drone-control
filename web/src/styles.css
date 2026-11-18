@@ -304,6 +304,7 @@ html:has(.app[data-mode="compact"]),html:has(.app[data-mode="compact"]) body{ove
 .camico.on{background:var(--grn);border-color:var(--grn);color:var(--bg)}
 .camico.on .slash{display:none}
 #camSvg{position:absolute;inset:0;width:100%;height:100%}
+#camOverlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .cambtn{white-space:nowrap;position:absolute;right:6px;bottom:6px;z-index:2;display:flex;align-items:center;gap:6px;height:32px;padding:0 10px;background:rgba(11,16,12,.85);border:1px solid var(--grn-2);border-radius:var(--r);color:var(--grn-tx);font-size:12px;font-weight:700}
 .cambtn.on{border-color:var(--line-2);color:var(--tx-2)}
 .camnote{position:absolute;left:6px;right:6px;top:6px;z-index:2;padding:4px 6px;background:rgba(0,0,0,.72);font-size:10.5px;line-height:1.35;color:var(--caut)}

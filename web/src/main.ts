@@ -108,7 +108,8 @@ const gesture: Gesture = live === null
             ? "descend"
             : "climb";
 const rate = live === null ? SAMPLE.appliedRate : live.rateMps;
-const gs = gestureStatus(gesture, held, rate);  byId("gstat").dataset["k"] = gs.k; byId("gMain").textContent = gs.main; byId("gSub").textContent = gs.sub;
+const pct = live?.mode === "confirming" ? Math.round(live.confirmProgress * 100) : undefined;
+const gs = gestureStatus(gesture, held, rate, pct);  byId("gstat").dataset["k"] = gs.k; byId("gMain").textContent = gs.main; byId("gSub").textContent = gs.sub;
   byId("heldAlt").innerHTML = heldAltitude(held);
   const v = drone(ui.video), up = v.state !== "grounded";
   byId("btnLandSel").hidden = !up; byId("btnTakeoffSel").hidden = up;
@@ -290,10 +291,40 @@ byId("btnTakeoff").addEventListener("click", () => {
 });
 
 // Hand camera: live preview and local gesture recognition. No altitude commands yet.
-function cameraNote(text: string): void {
+function cameraNote(text: string, ok = false): void {
   const n = byId("camNote");
   n.hidden = !text;
   n.textContent = text;
+  n.style.color = ok ? "var(--grn)" : ""; // green when it's good enough
+}
+
+// dashed neutral line and dead band over the live video
+function renderOverlay(control: GestureControlState | null): void {
+  const o = byId("camOverlay");
+  const ny = control?.neutralY;
+  if (ny == null) { o.innerHTML = ""; return; }
+  const y = ny * 240, dz = 0.03 * 240;
+  o.innerHTML = `<rect x="0" y="${y - dz}" width="320" height="${2 * dz}" fill="#fff" fill-opacity=".08"/>` +
+    `<line x1="0" y1="${y}" x2="320" y2="${y}" stroke="#fff" stroke-opacity=".8" stroke-dasharray="4 4"/>` +
+    `<text x="314" y="${y - dz - 4}" fill="#fff" font-size="9" text-anchor="end">neutral</text>`;
+}
+
+// what each mode change says in the event log
+const MODE_LOG: Record<GestureControlState["mode"], { text: string; k: "info" | "ok" | "warn" } | null> = {
+  idle: null,
+  confirming: { text: "Open palm seen, confirming", k: "info" },
+  active: { text: "Open palm confirmed, neutral point captured", k: "ok" },
+  locked: { text: "Closed fist, altitude locked, neutral point discarded", k: "info" },
+  hand_loss: { text: "Hand lost, holding altitude", k: "warn" },
+  unrecognized: { text: "Pose not recognised, holding", k: "warn" }
+};
+
+// add a log line when the gesture mode changes
+function logMode(prev: GestureControlState["mode"] | undefined, next: GestureControlState["mode"]): void {
+  if (prev === next) return;
+  if (prev === "unrecognized" && next === "active") return; // just resuming, not a fresh confirm
+  const entry = MODE_LOG[next];
+  if (entry) log.push({ t: SAMPLE.now, ...entry, ses: SAMPLE.trial.session, tr: SAMPLE.trial.id });
 }
 
 async function toggleCamera(): Promise<void> {
@@ -305,6 +336,7 @@ async function toggleCamera(): Promise<void> {
     ui.gestureController = null;
     gestureFps.reset();
     ui.liveControl = null;
+    renderOverlay(null);
     renderSoon();
 
     ui.gestureClient?.stop();
@@ -346,11 +378,13 @@ async function toggleCamera(): Promise<void> {
         const now = performance.now();
         const fps = gestureFps.tick(now);
         const frameMs = now - tMs; // time from sending the frame to getting its result
-        cameraNote(`${fps} FPS · ${frameMs.toFixed(0)} ms per frame`);
+        cameraNote(`${fps} FPS · ${frameMs.toFixed(0)} ms per frame`, fps >= 15); // so2 wants 15 fps or more
 
         const control = ui.gestureController!.update(result, tMs);
-          ui.liveControl = control;
-          renderSoon();
+        logMode(ui.liveControl?.mode, control.mode);
+        ui.liveControl = control;
+        renderOverlay(control);
+        renderSoon();
           console.log("MediaPipe:", result, "Gesture control:", control);
       },
       onError: message => cameraNote(`Gesture recognition: ${message}`)
@@ -359,6 +393,7 @@ async function toggleCamera(): Promise<void> {
 
   const on = !!ui.camera;
   video.hidden = !on;
+  byId("camOverlay").hidden = !on;
   byId("camSvg").style.display = on ? "none" : "";
   cameraNote("");
   btn.classList.toggle("on", on);

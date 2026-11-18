@@ -18,13 +18,25 @@ export async function createGestureRecognizer(
   const vision = await FilesetResolver.forVisionTasks(runtimeUrl, true);
 
   // create recognizer, use model from mediapipe/gesture_recognizer.task
-  return GestureRecognizer.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: modelUrl
-    },
-    runningMode: "VIDEO", // successive frames
-    numHands: 1 // max number of hands to detect in each frame
-  });
+  const make = (delegate: "GPU" | "CPU") =>
+    GestureRecognizer.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: modelUrl,
+        delegate // GPU is faster, CPU works everywhere
+      },
+      runningMode: "VIDEO", // successive frames
+      numHands: 1, // max number of hands to detect in each frame
+      minHandDetectionConfidence: 0.6, // skip weak hand detections
+      minHandPresenceConfidence: 0.6,
+      minTrackingConfidence: 0.5
+    });
+
+  // try the gpu first, fall back to the cpu if the tablet can't do it
+  try {
+    return await make("GPU");
+  } catch {
+    return make("CPU");
+  }
 }
 
 // for processing camera frame; returns gesture name and height of wrist

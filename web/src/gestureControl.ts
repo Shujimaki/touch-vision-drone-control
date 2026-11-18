@@ -15,6 +15,7 @@ export interface GestureControlState {
   mode: "idle" | "confirming" | "active" | "unrecognized" | "locked" | "hand_loss";
   rateMps: number;
   neutralY: number | null;
+  confirmProgress: number; // 0 to 1 while the open palm is held steady
 }
 
 const FILTER_SAMPLES = 5;
@@ -25,6 +26,7 @@ export class GestureController {
   private confirmStartMs: number | null = null;
   private confirmY: number | null = null;
   private wristSamples: number[] = [];
+  private lastMs = 0;
   private readonly config: Required<GestureControlConfig>;
 
   constructor(config: GestureControlConfig) {
@@ -51,6 +53,7 @@ export class GestureController {
 
   update(result: GestureFrameResult, tMs = performance.now()): GestureControlState {
     const wristY = result.wristY;
+    this.lastMs = tMs;
 
     // no hand means zero rate; wait for a fresh open palm
     if (!result.handDetected || wristY === null) {
@@ -204,10 +207,16 @@ export class GestureController {
   }
 
   private state(rateMps: number): GestureControlState {
+    // how far along the steady palm hold is, for the confirm %
+    const progress = this.mode === "confirming" && this.confirmStartMs !== null
+      ? Math.min(1, (this.lastMs - this.confirmStartMs) / this.config.confirmMs || 0)
+      : 0;
+
     return {
       mode: this.mode,
       rateMps,
-      neutralY: this.neutralY
+      neutralY: this.neutralY,
+      confirmProgress: progress
     };
   }
 }
