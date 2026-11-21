@@ -240,7 +240,7 @@ The [evaluation plan](CONTEXT.md#evaluation-method-and-numerical-targets) define
 Record commands, equipment, dependency versions, results, and limitations for each test run.
 
 Before each commit and pull request, stage the change and run `python3 scripts/check.py`. The script needs Python 3.10 or later and no packages.
-It checks ignored files, possible secrets, local links and anchors, the example messages, and changed Mermaid diagrams.
+It checks ignored files, possible secrets, words that a [GLOSSARY.md](GLOSSARY.md) `_Never_:` line bans, local links and anchors, the example messages, and changed Mermaid diagrams.
 After their configuration files exist, it also runs pytest, `tsc`, and Vitest. [AGENTS.md](AGENTS.md#before-delivery) lists the checks that need judgment.
 
 ## Project documentation

@@ -1,6 +1,6 @@
 # Touch and vision multi-drone control: build terms
 
-Terms that came up while building the software. The proposal terms live in [CONTEXT.md "Shared glossary"](CONTEXT.md#shared-glossary). This file links to them instead of redefining them.
+Terms that came up while building the software. An `_Avoid_:` line lists words to avoid for a term. A `_Never_:` line lists words that `scripts/check.py` rejects in any added line outside this file and CONTEXT.md, including inside identifiers such as `flightFleet`. The proposal terms live in [CONTEXT.md "Shared glossary"](CONTEXT.md#shared-glossary). This file links to them instead of redefining them.
 
 ## Systems
 
@@ -16,31 +16,35 @@ _Avoid_: Ground station, backend server (for the machine)
 
 **Python command bridge**:
 The program on the flight host that connects the tablet web app to the swarm. It speaks message format v1 to the tablet and drives the drones through Crazyswarm2.
-_Avoid_: Backend server, host server, ground station
+_Avoid_: Backend server, ground station
+_Never_: host server
 
 **Message log**:
 The file of JSON lines the Python command bridge writes when it starts with `--log`. It holds each received `input` and each target sent to the drone connection, so a test flight can show its command rate. It is not the trial recorder ([REQ-18](CONTEXT.md#evaluation-method-and-numerical-targets)).
-_Avoid_: Trial log, flight record
+_Never_: Trial log, flight record
 
 **Drone connection**:
 The boundary inside the Python command bridge between the bridge's own logic and whatever moves the drones. A mock drone connection stands in for the swarm during development, and the Crazyswarm2 drone connection drives the real swarm.
-_Avoid_: Driver, adapter, backend
+_Avoid_: adapter, backend
+_Never_: Driver
 
 **Crazyswarm2 client**:
 The boundary between the Crazyswarm2 drone connection and Crazyswarm2. It sends takeoff, land, notify setpoints stop, `cmd_position`, and set parameter, and it delivers poses, status, and stream ticks back. The real Crazyswarm2 client wraps `crazyflie_py` and is the only module that imports `rclpy`. The fake Crazyswarm2 client simulates drones in tests.
-_Avoid_: Client (alone), ROS wrapper
+_Avoid_: Client (alone)
+_Never_: ROS wrapper
 
 **Swarm**:
 The three Crazyflie drones flown in a trial, each with its own radio address.
-_Avoid_: Fleet, team (for the drones)
+_Avoid_: team (for the drones)
+_Never_: Fleet
 
 **Flow deck**:
 The Bitcraze Flow deck v2 mounted under each Crazyflie. It measures height and motion over the floor, so the drone can estimate its own position without motion capture.
-_Avoid_: Flow sensor, bottom deck
+_Never_: Flow sensor, bottom deck
 
 **Motion capture machine**:
 A separate computer that runs the lab's motion capture software and publishes measured drone positions to the flight host.
-_Avoid_: Mocap server, tracking host
+_Never_: Mocap server, tracking host
 
 ## Flight
 
@@ -50,7 +54,8 @@ _Avoid_: Emergency stop, kill, halt
 
 **Emergency cut**:
 Cutting a drone's motors at once. The drone falls, and it must be restarted before it can fly again. The Python command bridge never sends it. It is a last resort for a person at the flight host.
-_Avoid_: Stop, emergency stop, kill switch
+_Avoid_: Stop, emergency stop
+_Never_: kill switch
 
 ## Map
 
@@ -64,8 +69,9 @@ _Avoid_: Local frame, body frame, odometry frame
 
 **Flight test page**:
 A second page of the tablet web app for flying one drone in the takeoff frame. It shows one drone circle that starts at the center and follows one finger, plus takeoff, land, and stop buttons. It is for test flights, not trials.
-_Avoid_: Joystick page, debug page, drag page
+_Never_: Joystick page, debug page, drag page
 
 **Target marker**:
 The map symbol for where a drone is heading: the target the Python command bridge holds for it. It differs from the [drone entity](CONTEXT.md#shared-glossary), which shows the measured position.
-_Avoid_: Ghost, cursor, setpoint marker
+_Avoid_: cursor
+_Never_: Ghost, setpoint marker

@@ -52,6 +52,10 @@ MERMAID_SETUP_ERROR = re.compile(
     r"|Could not find (?:Chrome|browser)|Failed to launch the browser|Browser was not found",
     re.IGNORECASE,
 )
+NEVER_PREFIX = "_Never_:"
+# GLOSSARY.md names the banned words, CONTEXT.md keeps the thesis proposal's own wording,
+# and the check's own tests use banned words as test data.
+GLOSSARY_EXEMPT = {"GLOSSARY.md", "CONTEXT.md", "test/test_check_glossary.py"}
 # Only the repository ignore rules count, not each developer's global ignore file.
 REPO_IGNORE_RULES = ["-c", f"core.excludesFile={os.devnull}"]
 SECRET_PATTERNS = {
@@ -187,6 +191,46 @@ def check_secrets(base: str) -> Result:
     if findings:
         return Result("FAIL", "secrets", "added lines contain possible tokens or keys", findings)
     return Result("PASS", "secrets", f"no token or key pattern in {len(lines)} added lines")
+
+
+def words(text: str) -> list[str]:
+    """Split prose and camelCase or snake_case identifiers into lowercase words."""
+    return [word.lower() for word in re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+", text)]
+
+
+def never_terms(glossary: str) -> list[tuple[str, ...]]:
+    terms: list[tuple[str, ...]] = []
+    for line in glossary.splitlines():
+        if line.startswith(NEVER_PREFIX):
+            terms += [tuple(words(term)) for term in line[len(NEVER_PREFIX):].split(",") if words(term)]
+    return terms
+
+
+def glossary_findings(lines: list[tuple[str, int, str]], terms: list[tuple[str, ...]]) -> list[str]:
+    findings: list[str] = []
+    for path, number, text in lines:
+        found = words(text)
+        for term in terms:
+            *head, last = term
+            for start in range(len(found) - len(term) + 1):
+                window = found[start : start + len(term)]
+                if window[:-1] == head and window[-1] in (last, last + "s"):
+                    findings.append(f"{path}:{number}: {' '.join(term)}")
+                    break
+    return findings
+
+
+def check_glossary(base: str) -> Result:
+    if "GLOSSARY.md" not in index_files():
+        return Result("SKIP", "glossary", "no GLOSSARY.md")
+    terms = never_terms(read_index("GLOSSARY.md"))
+    if not terms:
+        return Result("SKIP", "glossary", f"GLOSSARY.md has no {NEVER_PREFIX} line")
+    lines = [line for line in added_lines(base) if line[0] not in GLOSSARY_EXEMPT]
+    findings = glossary_findings(lines, terms)
+    if findings:
+        return Result("FAIL", "glossary", f"added lines use a word that a GLOSSARY.md {NEVER_PREFIX} line bans", findings)
+    return Result("PASS", "glossary", f"no {NEVER_PREFIX} word in {len(lines)} added lines")
 
 
 def blank(match: re.Match[str]) -> str:
@@ -433,6 +477,7 @@ def main() -> int:
     results = [
         check_ignored_files(),
         check_secrets(base),
+        check_glossary(base),
         check_links(),
         check_json(),
         check_mermaid(base),
