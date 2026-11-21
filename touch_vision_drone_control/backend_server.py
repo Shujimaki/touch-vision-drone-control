@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Literal, Protocol, TextIO, get_args
 from aiohttp import web
 
 from touch_vision_drone_control.drone_connection import DroneConnection, Position
-from touch_vision_drone_control.host_config import PLACEHOLDER_CONFIG, TAKEOFF_CONFIG
+from touch_vision_drone_control.host_config import PLACEHOLDER_CONFIG, TAKEOFF3_CONFIG, TAKEOFF_CONFIG
 from touch_vision_drone_control.messages import HostConfig
 from touch_vision_drone_control.mock_drone_connection import MockDroneConnection
 from touch_vision_drone_control.ws_server import create_app
@@ -23,12 +23,16 @@ if TYPE_CHECKING:
 DEFAULT_PORT = 8765
 
 DroneOption = Literal["mock", "crazyswarm2"]
-ConfigOption = Literal["course", "takeoff"]
+ConfigOption = Literal["course", "takeoff", "takeoff3"]
 
 CRAZYSWARM2_MODULE = "touch_vision_drone_control.crazyswarm2_drone_connection"
 CRAZYSWARM2_CLIENT_MODULE = "touch_vision_drone_control.crazyswarm2_client"
 
-_CONFIGS: dict[ConfigOption, HostConfig] = {"course": PLACEHOLDER_CONFIG, "takeoff": TAKEOFF_CONFIG}
+_CONFIGS: dict[ConfigOption, HostConfig] = {
+    "course": PLACEHOLDER_CONFIG,
+    "takeoff": TAKEOFF_CONFIG,
+    "takeoff3": TAKEOFF3_CONFIG,
+}
 
 
 class StartupError(Exception):

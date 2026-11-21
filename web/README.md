@@ -30,12 +30,14 @@ Without a bridge, a dragged drone moves only on the map. Its sample sensor readi
 
 ## Flight test page
 
-`flight-test.html` is a second page for flying cf1 in the takeoff frame ([ADR 0007](../docs/adr/0007-fly-one-drone-without-motive.md)). Start the bridge with `--config takeoff`, then open `/flight-test.html`. It is for test flights, not trials.
+`flight-test.html` is a second page for flying drones in the takeoff frame ([ADR 0007](../docs/adr/0007-fly-one-drone-without-motive.md)). Start the bridge with `--config takeoff` for cf1 alone or `--config takeoff3` for three drones, then open `/flight-test.html`. The page takes its drones from `welcome.config.drones`, so it names no drone itself. It is for test flights, not trials.
 
 - **Box:** the page draws `welcome.config.course.capture_volume` with +x up the screen and +y to the left. A label above the box is for the wall that the taped floor arrow points to. The page does not know the lab's wall names yet, so the label says "the wall the floor arrow points to".
-- **Buttons:** Take off and Land send `takeoff` and `land` for cf1. Stop sends `stop`, which has no drone list. The page shows the bridge's reply to the last command, with the reason when the bridge refuses it.
-- **Drag:** hold the drone circle with one finger once cf1 is flying, and drag. The page sends one held entry on the connection's 30 Hz input timer, with the altitude channel at `idle`. A finger outside the box sends no new target. When the finger lifts, the bridge holds the drone where it is ([ADR 0004](../docs/adr/0004-held-targets-and-release.md)).
-- **Telemetry:** the panel shows flight state, measured position, target, position age, radio link, and battery voltage. A dashed target marker shows the target.
+- **Drone picker:** one button per configured drone plus All. The page starts on the first drone. The header shows the pick.
+- **Buttons:** Take off and Land send `takeoff` and `land` for the picked drone, or for every configured drone with All. The bridge acts on each drone that accepts the command. If any drone refuses, the reply reads as refused and names that drone. Stop sends `stop`, which has no drone list. The page shows the bridge's reply to the last command, with the reason when the bridge refuses it.
+- **Drag:** pick a drone, hold its circle with one finger once it is flying, and drag. With All picked, a finger moves nothing. Holding several drones with several fingers comes later (#57). The page sends one held entry on the connection's 30 Hz input timer, with the altitude channel at `idle`. A finger outside the box sends no new target. When the finger lifts, the bridge holds the drone where it is ([ADR 0004](../docs/adr/0004-held-targets-and-release.md)).
+- **Drones:** each drone gets a circle labelled with its id, drawn at its pad until telemetry arrives.
+- **Telemetry:** one card per drone shows flight state, measured position, target, position age, radio link, and battery voltage. A dashed target marker shows the target.
 - **Loss:** when the page is hidden, it releases the finger and sends a final `input` at once. On bridge loss the badge reads "Bridge lost, retrying", and the buttons are disabled until the page reconnects.
 
 `src/takeoffView.ts` maps a screen point to a takeoff-frame point and back.

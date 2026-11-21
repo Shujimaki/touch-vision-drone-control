@@ -47,4 +47,7 @@ describe("flight test page", () => {
   it("uses no socket, request, or timer API directly", () => {
     for (const banned of ["WebSocket", "fetch(", "XMLHttpRequest", "serviceWorker", "setInterval"]) expect(pageScript, banned).not.toContain(banned);
   });
+  it("names no drone itself; the drones come from welcome.config", () => {
+    expect(pageScript.match(/["'`]cf\d+["'`]/g)).toBeNull();
+  });
 });

@@ -45,3 +45,24 @@ TAKEOFF_CONFIG = PLACEHOLDER_CONFIG.model_copy(
     }
 )
 """One drone in a 1 m by 1 m box around its takeoff spot, in the takeoff frame (ADR 0007)."""
+
+TAKEOFF3_PAD_SPACING_M = 0.6
+
+TAKEOFF3_CONFIG = TAKEOFF_CONFIG.model_copy(
+    update={
+        "id": "takeoff3-draft-0.1",
+        "drones": ["cf1", "cf2", "cf3"],
+        "course": Course(
+            room=Rect(x_min=-0.5, x_max=0.5, y_min=-1.0, y_max=1.0),
+            capture_volume=Rect(x_min=-0.4, x_max=0.4, y_min=-0.9, y_max=0.9),
+            restricted_zone=Rect(x_min=0.42, x_max=0.48, y_min=0.92, y_max=0.98),
+            obstacles=[],
+            hoops=[],
+            pads=[
+                Pad(id="cf1", x=0.0, y=0.0),
+                Pad(id="cf2", x=0.0, y=TAKEOFF3_PAD_SPACING_M),
+                Pad(id="cf3", x=0.0, y=-TAKEOFF3_PAD_SPACING_M),
+            ],
+        ),
+    }
+)
