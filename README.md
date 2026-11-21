@@ -73,7 +73,7 @@ Replace `<laptop-ip>` with the laptop's address on the team's router.
 
 ### Run on the tablet without internet
 
-In the lab the tablet joins the team's router, which has no internet. The bridge then serves the built tablet web app and `/ws` from one HTTPS origin, so the flight host runs one server and no Vite ([ADR 0005](docs/adr/0005-bridge-serves-the-tablet-web-app.md)). An origin is the scheme, address, and port of a URL, such as `https://192.168.1.10:8765`. `web/test/build.test.ts` builds the tablet web app and fails if a built file names an address on another origin or references an asset that the build does not contain.
+In the lab the tablet joins the team's router, which has no internet. The bridge then serves the built tablet web app and `/ws` from one HTTPS origin, so the flight host runs one server and no Vite ([ADR 0005](docs/adr/0005-bridge-serves-the-tablet-web-app.md)). An origin is the scheme, address, and port of a URL, such as `https://192.168.1.10:8765`. `web/test/build.test.ts` builds the tablet web app and fails if a built file names an address on another origin or references an asset that the build does not contain. The MediaPipe loaders are the one exception: the test allows, by exact value, the addresses they name in comments and error text, and checks that the model and loader are in the build once the setup script has run.
 
 1. Build the tablet web app. From `web/`, run `npm ci`, then `node scripts/setup-mediapipe.mjs` (it needs internet the first time), then `npm run build`. It writes `web/dist/`, with the gesture model and runtime in `web/dist/mediapipe/`.
 2. Make the certificate as the commands above show, with the flight host's address in place of `<laptop-ip>`.
