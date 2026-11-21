@@ -1,3 +1,11 @@
+# colcon reads setup() metadata with ast.literal_eval, which cannot parse SpecifierSet's repr.
+# setuptools 68 (Ubuntu 24.04) builds python_requires with its vendored packaging.
+try:
+    from setuptools.extern.packaging.specifiers import SpecifierSet
+except ImportError:
+    from packaging.specifiers import SpecifierSet
+SpecifierSet.__repr__ = lambda self: repr(str(self))
+
 from setuptools import find_packages, setup
 
 package_name = 'touch_vision_drone_control'
