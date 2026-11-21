@@ -164,7 +164,9 @@ svg.addEventListener("pointerdown", e => {
 svg.addEventListener("pointermove", e => {
   if (view === null) return;
   const p = toTakeoff(view, screenPoint(e));
-  if (inBox(view.box, p) && bridge.drag({ pointerId: e.pointerId, timeStamp: e.timeStamp, x: p.x, y: p.y }) !== null) e.preventDefault();
+  if (!inBox(view.box, p)) return;
+  const accepted = bridge.drag({ pointerId: e.pointerId, timeStamp: e.timeStamp, x: p.x, y: p.y });
+  if (accepted !== null) e.preventDefault();
 });
 function release(e: PointerEvent): void {
   bridge.lift(e.pointerId);
