@@ -315,8 +315,11 @@ async function toggleCamera(): Promise<void> {
   btn.setAttribute("aria-pressed", String(on));
 }
 
+// ignore taps while the camera is still turning on or off, so only one worker runs
+let cameraToggle: Promise<void> | null = null;
 byId("camBtn").addEventListener("click", () => {
-  void toggleCamera();
+  if (cameraToggle) return;
+  cameraToggle = toggleCamera().finally(() => { cameraToggle = null; });
 });
 
 // ---------- settings: display only ----------
