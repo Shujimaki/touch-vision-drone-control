@@ -4,7 +4,7 @@ status: accepted
 
 # Gesture timings and thresholds
 
-[REQ-03 to REQ-06](../CONTEXT.md#required-interactions-and-control-behavior) set how the altitude channel behaves, but the proposal gives no numbers for it. [OPEN-07](../CONTEXT.md#unknowns-contradictions-and-open-decisions) lists the gesture confirmation time, dead zone, maximum rate, and pose-loss duration as absent. The tablet uses the values below. They are placeholders for the pilot trials to tune against [TARGET-06 and TARGET-07](../CONTEXT.md#evaluation-method-and-numerical-targets). Decided 2026-11-18 by the software team, which owns the gesture channel ([ROADMAP.md](../../ROADMAP.md), software part 3).
+[REQ-03 to REQ-06](../../CONTEXT.md#required-interactions-and-control-behavior) set how the altitude channel behaves, but the proposal gives no numbers for it. [OPEN-07](../../CONTEXT.md#unknowns-contradictions-and-open-decisions) lists the gesture confirmation time, dead zone, maximum rate, and pose-loss duration as absent. The tablet uses the values below. They are placeholders for the pilot trials to tune against [TARGET-06 and TARGET-07](../../CONTEXT.md#evaluation-method-and-numerical-targets). Decided 2026-11-18 by the software team, which owns the gesture channel ([ROADMAP.md](../../ROADMAP.md), software part 3).
 
 | Setting | Value | Reason |
 |---|---|---|
@@ -19,7 +19,7 @@ status: accepted
 | Hand loss | no hand for 300 ms or more | See below. |
 
 - **A short gap pauses, a long one is hand loss.** The rate is 0 from the first frame with no hand, so altitude holds at once, as REQ-06 asks. Under 300 ms, the tablet treats the gap like an unclear pose: it reports `unrecognized` and keeps the neutral point, so an open palm resumes control. At 300 ms or more it reports `hand_loss`, drops the neutral point, and needs a fresh activation. At 15 FPS one missed frame lasts about 67 ms. Without the grace period, every tracking blip would force a full re-activation and count against gesture accuracy (TARGET-06).
-- **This is an interpretation.** REQ-06 says reappearance alone does not resume altitude changes after hand loss. This ADR reads a gap under 300 ms as a tracking blip, not as hand loss. Each frame still goes to the host in `input.frames`, so the trial records can recount the gaps with another threshold ([OPEN-12](../CONTEXT.md#unknowns-contradictions-and-open-decisions)).
+- **This is an interpretation.** REQ-06 says reappearance alone does not resume altitude changes after hand loss. This ADR reads a gap under 300 ms as a tracking blip, not as hand loss. Each frame still goes to the host in `input.frames`, so the trial records can recount the gaps with another threshold ([OPEN-12](../../CONTEXT.md#unknowns-contradictions-and-open-decisions)).
 
 ## Consequences
 
