@@ -1,15 +1,19 @@
 // messages sent between the page and the gesture worker
 
-import type { readGestureFrame } from "./gesture";
-
-// data returned by our frame-reading function
-export type GestureFrameResult = ReturnType<typeof readGestureFrame>;
+// what the worker reads from one camera frame
+export interface GestureFrameResult {
+  handDetected: boolean;
+  label: string | null; // gesture name, like Open_Palm
+  score: number | null; // model's confidence in the label
+  wristY: number | null; // 0 is the image top, 1 is the bottom
+}
 
 // messages from the page to the worker; either initialization or frame-processing
 export type GestureWorkerRequest =
-  | { type: "init" 
+  | {
+      type: "init";
       assetBaseUrl: string; // url of web app's public/mediapipe folder
-  }   
+    }
   | {
       type: "frame"; // identifies this as a frame to be processed
       frame: ImageBitmap; // holds camera snapshot
@@ -21,7 +25,7 @@ export type GestureWorkerResponse =
   | { type: "ready" } // page can begin sending frames to worker
   | {
       type: "result"; // identifies this as a recognition result
-      result: GestureFrameResult; // recognition data matching the function's return type
+      result: GestureFrameResult;
     }
   | {
       type: "error";
