@@ -457,6 +457,89 @@ describe("input stream", () => {
     expect(new Set(inputs(sockets[1]!).map(m => JSON.stringify(m["held"])))).toEqual(new Set(["[]"]));
   });
 
+  it("holds nothing before any finger goes down", () => {
+    const { connection } = connected();
+    expect(connection.held()).toEqual(new Map());
+  });
+
+  function holdingCf1AndCf2() {
+    const c = holdingCf1();
+    c.connection.hold({ pointerId: 8, timeStamp: 5301 }, "cf2");
+    return c;
+  }
+
+  it("lets two fingers hold two drones, and sends one held entry per finger", () => {
+    const { socket, connection } = holdingCf1AndCf2();
+
+    telemetryFor(100, socket);
+
+    expect(connection.held()).toEqual(new Map([[7, "cf1"], [8, "cf2"]]));
+    expect(lastHeld(socket)).toEqual([
+      { id: "cf1", x: 1.2, y: 0.85, touch_ms: 5300.5, follow: true },
+      { id: "cf2", x: 1.6, y: 1.4, touch_ms: 5301, follow: true },
+    ]);
+  });
+
+  it("moves each held drone's target with its own finger", () => {
+    const { socket, connection } = holdingCf1AndCf2();
+
+    connection.drag({ pointerId: 7, timeStamp: 5310, x: 1.0, y: 0.9 });
+    connection.drag({ pointerId: 8, timeStamp: 5311, x: 1.5, y: 1.0 });
+    telemetryFor(100, socket);
+
+    expect(lastHeld(socket)).toEqual([
+      { id: "cf1", x: 1.0, y: 0.9, touch_ms: 5310, follow: true },
+      { id: "cf2", x: 1.5, y: 1.0, touch_ms: 5311, follow: true },
+    ]);
+  });
+
+  it("does not let a second finger take over a held drone", () => {
+    const { connection } = holdingCf1();
+
+    expect(connection.hold({ pointerId: 8, timeStamp: 5301 }, "cf1")).toBe(false);
+    expect(connection.held()).toEqual(new Map([[7, "cf1"]]));
+  });
+
+  it("releases only the lifted finger's drone, and the other drone keeps following its finger", () => {
+    const { socket, connection } = holdingCf1AndCf2();
+
+    connection.lift(7);
+    connection.drag({ pointerId: 8, timeStamp: 5312, x: 1.5, y: 1.0 });
+    telemetryFor(100, socket);
+
+    expect(connection.held()).toEqual(new Map([[8, "cf2"]]));
+    expect(lastHeld(socket)).toEqual([{ id: "cf2", x: 1.5, y: 1.0, touch_ms: 5312, follow: true }]);
+  });
+
+  it("keeps each finger's target inside the capture volume while two fingers drag", () => {
+    const { socket, connection } = holdingCf1AndCf2();
+
+    connection.drag({ pointerId: 7, timeStamp: 5310, x: 1.0, y: 0.9 });
+    connection.drag({ pointerId: 8, timeStamp: 5311, x: -1, y: 1.4 });
+    telemetryFor(100, socket);
+
+    expect(lastHeld(socket)).toEqual([
+      { id: "cf1", x: 1.0, y: 0.9, touch_ms: 5310, follow: true },
+      { id: "cf2", x: 0.25, y: 1.4, touch_ms: 5311, follow: true },
+    ]);
+  });
+
+  it("holds nothing after the bridge is lost", () => {
+    const { connection } = holdingCf1AndCf2();
+
+    vi.advanceTimersByTime(TELEMETRY_TIMEOUT_MS);
+
+    expect(connection.held()).toEqual(new Map());
+  });
+
+  it("holds nothing after every contact is released", () => {
+    const { connection } = holdingCf1AndCf2();
+
+    connection.releaseAllAndSendInput();
+
+    expect(connection.held()).toEqual(new Map());
+  });
+
   it("refuses a hold before the bridge welcomes the tablet", () => {
     const { socket, connection } = start();
     socket.open();

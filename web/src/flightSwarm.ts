@@ -34,6 +34,3 @@ export function commandTargets(p: DronePick, drones: readonly SwarmDrone[]): str
   if (p.kind === "all") return drones.map(d => d.id);
   return drones.some(d => d.id === p.id) ? [p.id] : [];
 }
-
-export const dragTarget = (p: DronePick, drones: readonly SwarmDrone[]): SwarmDrone | null =>
-  p.kind === "all" ? null : drones.find(d => d.id === p.id) ?? null;
