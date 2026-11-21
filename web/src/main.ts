@@ -302,7 +302,7 @@ async function toggleCamera(): Promise<void> {
 
     ui.gestureClient = startGestureClient({
       video,
-      onResult: result => console.log("MediaPipe:", result),
+      onResult: () => cameraNote(""), // results flow again, so clear any old error
       onError: message => cameraNote(`Gesture recognition: ${message}`)
     });
   }
