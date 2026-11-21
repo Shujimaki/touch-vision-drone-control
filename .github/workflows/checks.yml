@@ -42,6 +42,9 @@ jobs:
       # The runner is discarded after the job, and Chrome keeps its own sandbox.
       # https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md
       - run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+      # setup-node caches ~/.npm, including npx installs, but not the Chrome that puppeteer downloads to ~/.cache/puppeteer.
+      # A restored mermaid-cli skips that download, so mermaid-cli cannot start. Clearing the npx installs makes npx reinstall both.
+      - run: rm -rf ~/.npm/_npx
       - run: uv run --locked --script scripts/check.py --strict --base "origin/$BASE_REF"
         env:
           BASE_REF: ${{ github.base_ref }}
