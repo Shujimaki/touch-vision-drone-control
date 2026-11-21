@@ -4,7 +4,10 @@ Each harness builds one drone connection and a `wait` function that lets time
 pass. The mock drone connection moves a fake clock.
 """
 
-from collections.abc import Callable
+import importlib.util
+import os
+import time
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
 import pytest
@@ -29,6 +32,15 @@ DRONES = ["cf1", "cf2", "cf3"]
 MOCK_SPEED_LIMIT_MPS = 0.5
 SIMULATED_MAX_MOVE_M = 0.5
 SIMULATED_TOLERANCE_M = 0.05
+CF1_MAX_MOVE_M = 0.15
+CF1_TOLERANCE_M = 0.07
+"""Not yet checked on cf1. A Flow deck hover wanders more than the simulations."""
+CF1_TIMEOUT_S = 15.0
+
+FLY_CF1 = pytest.mark.skipif(
+    os.environ.get("TVDC_FLY_CF1") != "1" or importlib.util.find_spec("rclpy") is None,
+    reason="flies the real cf1: set TVDC_FLY_CF1=1 on the flight host with ROS 2 sourced",
+)
 
 
 @dataclass(kw_only=True)
@@ -41,6 +53,7 @@ class Harness:
     tolerance_m: float
 
 
+@pytest.fixture
 def mock_harness() -> Harness:
     clock = FakeClock()
     connection = MockDroneConnection(DRONES, clock=clock, speed_limit_mps=MOCK_SPEED_LIMIT_MPS)
@@ -54,6 +67,7 @@ def mock_harness() -> Harness:
     )
 
 
+@pytest.fixture
 def fake_crazyswarm2_harness() -> Harness:
     clock = FakeClock()
     client = FakeCrazyswarm2Client(clock, TAKEOFF_CONFIG.drones)
@@ -69,15 +83,43 @@ def fake_crazyswarm2_harness() -> Harness:
     )
 
 
+@pytest.fixture(scope="session")
+def cf1_connection() -> Iterator[DroneConnection]:
+    from touch_vision_drone_control.crazyswarm2_client import RosCrazyswarm2Client
+
+    connection = Crazyswarm2DroneConnection(
+        TAKEOFF_CONFIG, clock=time.monotonic, client=RosCrazyswarm2Client(TAKEOFF_CONFIG.drones)
+    )
+    yield connection
+    connection.close()
+
+
+@pytest.fixture
+def cf1_harness(cf1_connection: DroneConnection) -> Iterator[Harness]:
+    harness = Harness(
+        connection=cf1_connection,
+        wait=time.sleep,
+        timeout_s=CF1_TIMEOUT_S,
+        speed_limit_mps=SPEED_LIMIT_MPS,
+        max_move_m=CF1_MAX_MOVE_M,
+        tolerance_m=CF1_TOLERANCE_M,
+    )
+    yield harness
+    if report_of(harness, "cf1").state is not FlightState.GROUNDED:
+        harness.connection.land(["cf1"])
+    wait_until(harness, "cf1", lambda r: r.state is FlightState.GROUNDED)
+
+
 HARNESSES = [
-    pytest.param(mock_harness, id="mock"),
-    pytest.param(fake_crazyswarm2_harness, id="fake-crazyswarm2"),
+    pytest.param("mock_harness", id="mock"),
+    pytest.param("fake_crazyswarm2_harness", id="fake-crazyswarm2"),
+    pytest.param("cf1_harness", id="cf1", marks=FLY_CF1),
 ]
 
 
 @pytest.fixture(params=HARNESSES)
 def harness(request: pytest.FixtureRequest) -> Harness:
-    harness: Harness = request.param()
+    harness: Harness = request.getfixturevalue(request.param)
     return harness
 
 

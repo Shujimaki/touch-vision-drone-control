@@ -5,7 +5,7 @@ The application combines touch positioning, hand gestures for altitude control, 
 
 ## Current status
 
-The project is in development. The tablet web app is a mockup that connects to the Python command bridge and shows the connection state. It draws each drone entity at its measured position from telemetry. The bridge answers `hello` with `welcome`, checks the connection rules of [message format v1](protocol/README.md), and sends `telemetry` from the mock drone connection at 30 Hz. The tablet's Take off and Land buttons send `command`, and the bridge takes off or lands the mock drones and answers with `reply`. The tablet shows each drone's flight state from telemetry. The drone connection and its mock have a contract test suite. One finger can hold a flying drone and drag it. The tablet sends `input` at 30 Hz with the target that passed the restricted-zone check. The bridge streams setpoints to every flying mock drone at 20 Hz or more, with or without input. The altitude channel is a stub that always reports `idle`. The bridge can serve the built tablet web app and `/ws` from one HTTPS origin for the tablet. That path has not been tested on the Tab S9 yet. Startup options pick the drone connection and the host configuration, including a takeoff configuration for one drone in a 1 m box. The flight test page flies that drone with takeoff, land, stop, and one-finger drags. It has been checked in a browser against the mock only. Only the mock drone connection exists so far.
+The project is in development. The tablet web app is a mockup that connects to the Python command bridge and shows the connection state. It draws each drone entity at its measured position from telemetry. The bridge answers `hello` with `welcome`, checks the connection rules of [message format v1](protocol/README.md), and sends `telemetry` from the mock drone connection at 30 Hz. The tablet's Take off and Land buttons send `command`, and the bridge takes off or lands the mock drones and answers with `reply`. The tablet shows each drone's flight state from telemetry. The drone connection and its mock have a contract test suite. One finger can hold a flying drone and drag it. The tablet sends `input` at 30 Hz with the target that passed the restricted-zone check. The bridge streams setpoints to every flying mock drone at 20 Hz or more, with or without input. The altitude channel is a stub that always reports `idle`. The bridge can serve the built tablet web app and `/ws` from one HTTPS origin for the tablet. That path has not been tested on the Tab S9 yet. Startup options pick the drone connection and the host configuration, including a takeoff configuration for one drone in a 1 m box. The flight test page flies that drone with takeoff, land, stop, and one-finger drags. It has been checked in a browser against the mock only. The Crazyswarm2 drone connection and its real Crazyswarm2 client are written, but they have not flown cf1 yet.
 The repository contains no hardware compatibility or flight-performance test results.
 
 This README describes the planned software architecture, setup needs, dependencies, development steps, and tests.
@@ -43,7 +43,7 @@ The front camera reads the hand. Motion capture measures drone positions. The se
 
 ### Run the bridge and the tablet web app
 
-The bridge needs [uv](https://docs.astral.sh/uv/). `pyproject.toml` and `uv.lock` pin its dependencies for development and tests. The install path on the flight host is still open ([ADR 0001](docs/adr/0001-bridge-inside-ros2-package.md)). From the repository root, start the bridge:
+The bridge needs [uv](https://docs.astral.sh/uv/). `pyproject.toml` and `uv.lock` pin its dependencies for development and tests. On the flight host, the bridge runs from the venv in [ADR 0008](docs/adr/0008-bridge-install-path-on-the-flight-host.md). From the repository root, start the bridge:
 
 ```bash
 uv run python -m touch_vision_drone_control.backend_server
@@ -51,7 +51,7 @@ uv run python -m touch_vision_drone_control.backend_server
 
 It listens on `127.0.0.1:8765`. Two options choose what the bridge drives, and a third turns on the message log:
 
-- `--drones mock|crazyswarm2` picks the drone connection. The default is `mock`. The Crazyswarm2 drone connection exists, but its real Crazyswarm2 client does not yet, so `crazyswarm2` stops the bridge with an error.
+- `--drones mock|crazyswarm2` picks the drone connection. The default is `mock`. `crazyswarm2` needs ROS 2 and a running Crazyswarm2 server, so it runs only on the flight host. It stops the bridge with an error if `rclpy` doesn't import, if no Crazyswarm2 server answers within 10 s, if the server has no drone named in the host configuration, or if a drone sends no pose within 5 s. When the bridge exits, including on Ctrl-C, it lands every airborne drone ([ADR 0009](docs/adr/0009-crazyswarm2-drone-connection-behavior.md)).
 - `--config course|takeoff` picks the host configuration. The default is `course`, the placeholder course. `takeoff` is one drone, cf1, in a 1 m by 1 m box around its takeoff spot ([ADR 0007](docs/adr/0007-fly-one-drone-without-motive.md)). Fly it from the flight test page at `/flight-test.html`, as [web/README.md](web/README.md#flight-test-page) describes.
 - `--log PATH` appends the message log to `PATH`, such as `data/runs/flight.jsonl`, which Git ignores. Without it, the bridge writes no log.
 
@@ -223,7 +223,7 @@ uv run pytest
 
 `test/test_backend_server.py` checks the startup options and the host configurations they pick. `test/test_no_ros_imports.py` checks that the bridge modules and the mock startup path import without ROS 2. `test/test_tablet_web_app.py` checks that the bridge serves the built tablet web app beside `/ws`. `test/test_ws_server.py` opens a real WebSocket to `/ws` through pytest-aiohttp and builds its messages from the [example messages](protocol/examples/).
 
-`test/test_drone_connection_contract.py` is the contract suite for drone connections. It runs against the mock drone connection and against the Crazyswarm2 drone connection with a fake Crazyswarm2 client (`test/fake_crazyswarm2_client.py`), so neither needs ROS 2. A harness for the real cf1 is planned. It will run the same tests against the real drone.
+`test/test_drone_connection_contract.py` is the contract suite for drone connections. It runs against the mock drone connection and against the Crazyswarm2 drone connection with a fake Crazyswarm2 client (`test/fake_crazyswarm2_client.py`), so neither needs ROS 2. A third harness runs the same tests against the real cf1. It runs only on the flight host, with `TVDC_FLY_CF1=1` set and `rclpy` importable, and it flies cf1. It shares one connection across the tests, lands cf1 after each test, and calls `close()` at the end. It has not run yet.
 
 `test/test_crazyswarm2_drone_connection.py` checks the [ADR 0009](docs/adr/0009-crazyswarm2-drone-connection-behavior.md) rules that the contract suite can't show:
 
@@ -234,7 +234,7 @@ uv run pytest
 - notify setpoints stop before land
 - `close()`
 
-The fake Crazyswarm2 client follows our reading of the firmware source, which the cf1 harness still has to confirm. It cuts the motors after 2 s without `cmd_position`. It ignores takeoff and land while setpoints are in control. It also logs every call with its time. The real Crazyswarm2 client doesn't exist yet, so nothing calls `close()` when the bridge exits.
+The fake Crazyswarm2 client follows our reading of the firmware source, which the cf1 harness still has to confirm. It cuts the motors after 2 s without `cmd_position`. It ignores takeoff and land while setpoints are in control. It also logs every call with its time. The bridge calls `close()` as it shuts down. `test/test_ws_server.py` checks that shutdown calls it. The real Crazyswarm2 client (`crazyswarm2_client.py`) imports `rclpy`, so pytest can't import it on a laptop. No test covers its startup checks: the Crazyswarm2 server timeout, a missing drone, the missing `kalman.resetEstimation` parameter, and the first-pose timeout. Only the cf1 harness and a run on the flight host exercise them.
 
 The [evaluation plan](CONTEXT.md#evaluation-method-and-numerical-targets) defines the study procedure, numerical targets, and scoring rules.
 Record commands, equipment, dependency versions, results, and limitations for each test run.

@@ -49,6 +49,7 @@ class FakeCrazyswarm2Client:
         self._callbacks: Crazyswarm2Callbacks | None = None
         self._next_status_s = clock()
         self.calls: list[Call] = []
+        self.closes = 0
 
     def start(self, callbacks: Crazyswarm2Callbacks) -> None:
         self._callbacks = callbacks
@@ -79,6 +80,9 @@ class FakeCrazyswarm2Client:
         if value == 1:
             here = self._drones[drone].position
             self._drones[drone].position = Position(0.0, 0.0, here.z)
+
+    def close(self) -> None:
+        self.closes += 1
 
     def drop_telemetry(self, drone: str) -> None:
         self._drones[drone].sends_telemetry = False
