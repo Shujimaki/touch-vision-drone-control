@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inBox, takeoffView, toScreen, toTakeoff } from "../src/takeoffView";
+import { inBox, nearestWithin, takeoffView, toScreen, toTakeoff } from "../src/takeoffView";
 
 const BOX = { x_min: -0.5, x_max: 0.5, y_min: -0.5, y_max: 0.5 };
 
@@ -36,5 +36,39 @@ describe("takeoff view", () => {
     expect(outside.y).toBeCloseTo(0, 9);
     expect(inBox(BOX, outside)).toBe(false);
     expect(inBox(BOX, { x: 0.5, y: -0.5 })).toBe(true);
+  });
+});
+
+describe("drone under a finger", () => {
+  const view = takeoffView(400, 400, BOX);
+  const up = { id: "up", at: { x: 0.25, y: 0 } }, down = { id: "down", at: { x: -0.25, y: 0 } }, right = { id: "right", at: { x: 0, y: -0.25 } };
+  const center = toScreen(view, { x: 0, y: 0 }), gap = 0.25 * view.scale;
+
+  it("picks the nearer of two drones within the radius", () => {
+    const nearUp = toScreen(view, { x: 0.2, y: -0.02 });
+    expect(nearestWithin(view, nearUp, [right, up], 1.5 * gap)).toBe("up");
+  });
+
+  it("counts a drone exactly on the radius as a hit", () => {
+    expect(nearestWithin(view, center, [up], gap)).toBe("up");
+  });
+
+  it("finds nothing when the nearest drone is just outside the radius", () => {
+    expect(nearestWithin(view, center, [up], gap - 0.1)).toBeNull();
+  });
+
+  it("skips a drone with no position", () => {
+    const lost = { id: "lost", at: null };
+    expect(nearestWithin(view, center, [lost, up], 1.5 * gap)).toBe("up");
+    expect(nearestWithin(view, center, [lost], 1.5 * gap)).toBeNull();
+  });
+
+  it("gives a tie to the earlier drone in the list", () => {
+    expect(nearestWithin(view, center, [up, down], 1.5 * gap)).toBe("up");
+    expect(nearestWithin(view, center, [down, up], 1.5 * gap)).toBe("down");
+  });
+
+  it("finds nothing in an empty list", () => {
+    expect(nearestWithin(view, center, [], 1.5 * gap)).toBeNull();
   });
 });

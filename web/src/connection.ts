@@ -51,6 +51,8 @@ export interface Connection {
   /** Releases the drone a finger holds, if any. */
   lift(pointerId: number): void;
   releaseAllAndSendInput(): void;
+  /** Which drone each finger holds, by pointer id. A snapshot. */
+  held(): ReadonlyMap<number, string>;
 }
 
 function coveringSquareZone(config: HostConfig) {
@@ -109,15 +111,18 @@ export function connect(options: ConnectionOptions): Connection {
   }
 
   function drag(contact: Contact): AcceptedTarget | null {
-    const held = contacts.get(contact.pointerId), seen = held && latestDrones.get(held.id);
-    if (state.status !== "connected" || !held || !seen) return null;
+    const entry = contacts.get(contact.pointerId), seen = entry && latestDrones.get(entry.id);
+    if (state.status !== "connected" || !entry || !seen) return null;
     const config = state.welcome.config, v = config.course.capture_volume;
     const measured = seen.x !== null && seen.y !== null ? { x: seen.x, y: seen.y } : null;
     const fx = clamp(contact.x, v.x_min, v.x_max), fy = clamp(contact.y, v.y_min, v.y_max);
-    const to = acceptedTarget(held, measured, fx, fy, coveringSquareZone(config));
-    contacts.set(contact.pointerId, { ...held, x: to.x, y: to.y, touch_ms: contact.timeStamp });
+    const to = acceptedTarget(entry, measured, fx, fy, coveringSquareZone(config));
+    contacts.set(contact.pointerId, { ...entry, x: to.x, y: to.y, touch_ms: contact.timeStamp });
     return to;
   }
+
+  const held = () => new Map([...contacts].map(([pointer, h]) => [pointer, h.id]));
+  const lift = (pointerId: number) => { contacts.delete(pointerId); };
 
   function releaseAllAndSendInput(): void {
     contacts.clear();
@@ -202,5 +207,5 @@ export function connect(options: ConnectionOptions): Connection {
 
   setState(state);
   attempt();
-  return { state: () => state, hold, drag, lift: pointerId => { contacts.delete(pointerId); }, releaseAllAndSendInput };
+  return { state: () => state, hold, drag, lift, releaseAllAndSendInput, held };
 }

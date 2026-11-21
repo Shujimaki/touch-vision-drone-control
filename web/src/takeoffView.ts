@@ -22,3 +22,15 @@ export function toTakeoff(v: TakeoffView, s: ScreenPoint): FramePoint {
 
 export const inBox = (box: Rect, p: FramePoint): boolean =>
   p.x >= box.x_min && p.x <= box.x_max && p.y >= box.y_min && p.y <= box.y_max;
+
+export interface Placed { id: string; at: FramePoint | null }
+
+export function nearestWithin(v: TakeoffView, finger: ScreenPoint, items: readonly Placed[], radiusPx: number): string | null {
+  let best: string | null = null, bestPx = Infinity;
+  for (const { id, at } of items) {
+    if (at === null) continue;
+    const s = toScreen(v, at), px = Math.hypot(s.px - finger.px, s.py - finger.py);
+    if (px <= radiusPx && px < bestPx) { best = id; bestPx = px; }
+  }
+  return best;
+}

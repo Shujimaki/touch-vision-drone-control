@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commandTargets, dragTarget, dronePoint, firstPick, isPicked, pickAfterWelcome, swarm, type SwarmDrone } from "../src/flightSwarm";
+import { commandTargets, dronePoint, firstPick, isPicked, pickAfterWelcome, swarm, type SwarmDrone } from "../src/flightSwarm";
 import type { DroneTelemetry, HostConfig, Telemetry } from "../src/protocol";
 
 const BOX = { x_min: -0.5, x_max: 0.5, y_min: -1, y_max: 1 };
@@ -75,7 +75,7 @@ describe("drone point", () => {
 describe("drone pick", () => {
   const drones = swarm(THREE, null);
 
-  it("starts on the first configured drone, so one finger can drag it right away", () => {
+  it("starts on the first configured drone, so Take off and Land have a target right away", () => {
     expect(firstPick(THREE)).toEqual({ kind: "one", id: "cf1" });
   });
   it("starts on All when no drone is configured", () => {
@@ -104,12 +104,5 @@ describe("drone pick", () => {
   it("marks every drone picked under All, and only the picked one otherwise", () => {
     expect(["cf1", "cf2"].map(id => isPicked({ kind: "all" }, id))).toEqual([true, true]);
     expect(["cf1", "cf2"].map(id => isPicked({ kind: "one", id: "cf2" }, id))).toEqual([false, true]);
-  });
-
-  it("drags the picked drone", () => {
-    expect(dragTarget({ kind: "one", id: "cf2" }, drones)).toEqual(entry("cf2", { x: 0, y: 0.6 }));
-  });
-  it("drags nothing when All is picked", () => {
-    expect(dragTarget({ kind: "all" }, drones)).toBeNull();
   });
 });

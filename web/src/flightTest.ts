@@ -1,8 +1,8 @@
 import "./flightTest.css";
 import { connect, linkLabel, type ConnectionState } from "./connection";
-import { commandTargets, dragTarget, dronePoint, isPicked, pickAfterWelcome, swarm, type DronePick, type SwarmDrone } from "./flightSwarm";
+import { commandTargets, dronePoint, isPicked, pickAfterWelcome, swarm, type DronePick, type SwarmDrone } from "./flightSwarm";
 import type { CommandName, FlightCommand, HostConfig, Rect, Reply, Telemetry } from "./protocol";
-import { inBox, takeoffView, toScreen, toTakeoff, type TakeoffView } from "./takeoffView";
+import { inBox, nearestWithin, takeoffView, toScreen, toTakeoff, type TakeoffView } from "./takeoffView";
 
 const ARROW_WALL = "the wall the floor arrow points to";
 const PAD_PX = 48;
@@ -23,7 +23,6 @@ let link: ConnectionState = { status: "connecting" };
 let telemetry: Telemetry | null = null;
 let pick: DronePick | null = null;
 let view: TakeoffView | null = null;
-let held: { pointer: number; id: string } | null = null;
 
 function fitView(size: { width: number; height: number }, box: Rect): TakeoffView {
   const inner = takeoffView(Math.max(1, size.width - 2 * PAD_PX), Math.max(1, size.height - 2 * PAD_PX), box);
@@ -71,10 +70,10 @@ function render(): void {
     view = fitView(r, link.welcome.config.course.capture_volume);
   }
   svg.style.opacity = link.status === "failed" ? "0.4" : "1";
-  const swarmNow = drones(), v = view, heldId = held?.id;
+  const swarmNow = drones(), v = view, heldIds = new Set(bridge.held().values());
   const stale = link.status === "connected" ? link.welcome.config.stale_position_ms : Infinity;
   const p = link.status === "connected" ? pick : null, picked = (id: string) => p !== null && isPicked(p, id);
-  svg.innerHTML = v === null ? "" : drawBox(v) + swarmNow.map(d => drawDrone(v, d, { picked: picked(d.id), held: d.id === heldId })).join("");
+  svg.innerHTML = v === null ? "" : drawBox(v) + swarmNow.map(d => drawDrone(v, d, { picked: picked(d.id), held: heldIds.has(d.id) })).join("");
   renderPick(p);
   byId("telRows").innerHTML = swarmNow.map(d => telemetryCard(d, picked(d.id), stale)).join("");
 }
@@ -139,7 +138,7 @@ const bridge = connect({
   userAgent: navigator.userAgent,
   onState: showLink,
   onTelemetry: (t: Telemetry) => { telemetry = t; renderSoon(); },
-  onHostLost: () => { held = null; telemetry = null; renderSoon(); },
+  onHostLost: () => { telemetry = null; renderSoon(); },
   onCommandReply: showReply,
 });
 
@@ -155,29 +154,22 @@ picker.addEventListener("click", e => {
 });
 
 svg.addEventListener("pointerdown", e => {
-  if (held !== null || view === null || pick === null) return;
-  const target = dragTarget(pick, drones());
-  if (target === null) return;
-  const measured = dronePoint(target);
-  if (measured === null) return;
-  const p = screenPoint(e), here = toScreen(view, measured);
-  if (Math.hypot(p.px - here.px, p.py - here.py) > HIT_R_PX || !bridge.hold(e, target.id)) return;
+  if (view === null) return;
+  const id = nearestWithin(view, screenPoint(e), drones().map(d => ({ id: d.id, at: dronePoint(d) })), HIT_R_PX);
+  if (id === null || !bridge.hold(e, id)) return;
   e.preventDefault();
   svg.setPointerCapture(e.pointerId);
-  held = { pointer: e.pointerId, id: target.id };
   renderSoon();
 });
 svg.addEventListener("pointermove", e => {
-  if (e.pointerId !== held?.pointer || view === null) return;
-  e.preventDefault();
+  if (view === null) return;
   const p = toTakeoff(view, screenPoint(e));
   if (!inBox(view.box, p)) return;
-  bridge.drag({ pointerId: e.pointerId, timeStamp: e.timeStamp, x: p.x, y: p.y });
+  const accepted = bridge.drag({ pointerId: e.pointerId, timeStamp: e.timeStamp, x: p.x, y: p.y });
+  if (accepted !== null) e.preventDefault();
 });
 function release(e: PointerEvent): void {
-  if (e.pointerId !== held?.pointer) return;
   bridge.lift(e.pointerId);
-  held = null;
   renderSoon();
 }
 svg.addEventListener("pointerup", release);
@@ -185,7 +177,6 @@ svg.addEventListener("pointercancel", release);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "hidden") return;
   bridge.releaseAllAndSendInput();
-  held = null;
   renderSoon();
 });
 
