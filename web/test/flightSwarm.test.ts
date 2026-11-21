@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commandTargets, dragTarget, dronePoint, firstPick, fleet, isPicked, type FleetDrone } from "../src/flightFleet";
+import { commandTargets, dragTarget, dronePoint, firstPick, isPicked, pickAfterWelcome, swarm, type SwarmDrone } from "../src/flightSwarm";
 import type { DroneTelemetry, HostConfig, Telemetry } from "../src/protocol";
 
 const BOX = { x_min: -0.5, x_max: 0.5, y_min: -1, y_max: 1 };
@@ -29,11 +29,11 @@ const THREE = config(["cf1", "cf2", "cf3"], [
   { id: "cf3", x: 0, y: -0.6 }, { id: "cf1", x: 0, y: 0 }, { id: "cf2", x: 0, y: 0.6 },
 ]);
 
-const entry = (id: string, pad: FleetDrone["pad"], tel: DroneTelemetry | null = null): FleetDrone => ({ id, pad, tel });
+const entry = (id: string, pad: SwarmDrone["pad"], tel: DroneTelemetry | null = null): SwarmDrone => ({ id, pad, tel });
 
-describe("flight fleet", () => {
+describe("flight swarm", () => {
   it("lists one drone per configured drone, in config order, with its pad and no telemetry yet", () => {
-    expect(fleet(THREE, null)).toEqual([
+    expect(swarm(THREE, null)).toEqual([
       entry("cf1", { x: 0, y: 0 }), entry("cf2", { x: 0, y: 0.6 }), entry("cf3", { x: 0, y: -0.6 }),
     ]);
   });
@@ -41,17 +41,17 @@ describe("flight fleet", () => {
   it("matches telemetry to drones by id, not by position in the list", () => {
     const cf3 = drone("cf3", 0.1, -0.5);
     const cf1 = drone("cf1", 0.2, 0.1);
-    const drones = fleet(THREE, telemetry([cf3, cf1]));
+    const drones = swarm(THREE, telemetry([cf3, cf1]));
     expect(drones.map(d => [d.id, d.tel])).toEqual([["cf1", cf1], ["cf2", null], ["cf3", cf3]]);
   });
 
   it("gives a drone without a pad a null pad", () => {
-    const drones = fleet(config(["cf1", "cf2"], [{ id: "cf1", x: 0, y: 0 }]), null);
+    const drones = swarm(config(["cf1", "cf2"], [{ id: "cf1", x: 0, y: 0 }]), null);
     expect(drones.map(d => [d.id, d.pad])).toEqual([["cf1", { x: 0, y: 0 }], ["cf2", null]]);
   });
 
   it("ignores telemetry for a drone the config does not list", () => {
-    const drones = fleet(config(["cf1"], [{ id: "cf1", x: 0, y: 0 }]), telemetry([drone("cf9", 0, 0)]));
+    const drones = swarm(config(["cf1"], [{ id: "cf1", x: 0, y: 0 }]), telemetry([drone("cf9", 0, 0)]));
     expect(drones).toEqual([entry("cf1", { x: 0, y: 0 })]);
   });
 });
@@ -73,13 +73,22 @@ describe("drone point", () => {
 });
 
 describe("drone pick", () => {
-  const drones = fleet(THREE, null);
+  const drones = swarm(THREE, null);
 
   it("starts on the first configured drone, so one finger can drag it right away", () => {
     expect(firstPick(THREE)).toEqual({ kind: "one", id: "cf1" });
   });
   it("starts on All when no drone is configured", () => {
     expect(firstPick(config([], []))).toEqual({ kind: "all" });
+  });
+
+  it("keeps the pick across a reconnect while the new config still lists it", () => {
+    expect(pickAfterWelcome({ kind: "all" }, THREE)).toEqual({ kind: "all" });
+    expect(pickAfterWelcome({ kind: "one", id: "cf3" }, THREE)).toEqual({ kind: "one", id: "cf3" });
+  });
+  it("starts on the first drone on the first welcome, or when the new config drops the picked drone", () => {
+    expect(pickAfterWelcome(null, THREE)).toEqual({ kind: "one", id: "cf1" });
+    expect(pickAfterWelcome({ kind: "one", id: "cf9" }, THREE)).toEqual({ kind: "one", id: "cf1" });
   });
 
   it("sends takeoff and land to the picked drone only", () => {

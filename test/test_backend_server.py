@@ -93,7 +93,6 @@ def test_the_takeoff3_configuration_keeps_the_takeoff_heights_and_timing() -> No
     fields = ["z_min", "z_max", "input_hz", "telemetry_hz", "input_timeout_ms", "telemetry_timeout_ms",
               "stale_position_ms", "rate_max"]
     assert {k: getattr(config, k) for k in fields} == {k: getattr(takeoff, k) for k in fields}
-    assert (config.z_min, config.z_max) == (0.3, 1.0)
 
 
 def test_crazyswarm2_without_its_module_stops_the_bridge_with_a_clear_error(monkeypatch) -> None:

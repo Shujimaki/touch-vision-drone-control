@@ -48,6 +48,7 @@ describe("flight test page", () => {
     for (const banned of ["WebSocket", "fetch(", "XMLHttpRequest", "serviceWorker", "setInterval"]) expect(pageScript, banned).not.toContain(banned);
   });
   it("names no drone itself; the drones come from welcome.config", () => {
-    expect(pageScript.match(/["'`]cf\d+["'`]/g)).toBeNull();
+    const swarmScript = readFileSync(join(web, "src", "flightSwarm.ts"), "utf8");
+    for (const source of [pageScript, swarmScript]) expect(source.match(/["'`]cf\d+["'`]/g)).toBeNull();
   });
 });

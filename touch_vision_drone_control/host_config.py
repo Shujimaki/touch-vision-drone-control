@@ -47,6 +47,7 @@ TAKEOFF_CONFIG = PLACEHOLDER_CONFIG.model_copy(
 """One drone in a 1 m by 1 m box around its takeoff spot, in the takeoff frame (ADR 0007)."""
 
 TAKEOFF3_PAD_SPACING_M = 0.6
+"""Placeholder, not yet measured in the lab. The distance between neighbouring pads across the taped arrow."""
 
 TAKEOFF3_CONFIG = TAKEOFF_CONFIG.model_copy(
     update={
@@ -66,3 +67,4 @@ TAKEOFF3_CONFIG = TAKEOFF_CONFIG.model_copy(
         ),
     }
 )
+"""cf1, cf2 and cf3 on pads in a line across the taped arrow, in a 2 m by 1 m area, in the takeoff frame (ADR 0007)."""

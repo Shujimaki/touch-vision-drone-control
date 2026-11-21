@@ -1,7 +1,7 @@
 import "./flightTest.css";
 import { connect, linkLabel, type ConnectionState } from "./connection";
-import { commandTargets, dragTarget, dronePoint, firstPick, fleet, isPicked, type DronePick, type FleetDrone } from "./flightFleet";
-import type { CommandName, HostConfig, Rect, Reply, Telemetry } from "./protocol";
+import { commandTargets, dragTarget, dronePoint, isPicked, pickAfterWelcome, swarm, type DronePick, type SwarmDrone } from "./flightSwarm";
+import type { CommandName, FlightCommand, HostConfig, Rect, Reply, Telemetry } from "./protocol";
 import { inBox, takeoffView, toScreen, toTakeoff, type TakeoffView } from "./takeoffView";
 
 const ARROW_WALL = "the wall the floor arrow points to";
@@ -21,7 +21,7 @@ const stopButton = byId<HTMLButtonElement>("btnStop"), buttons = [takeoffButton,
 const picker = byId("picker");
 let link: ConnectionState = { status: "connecting" };
 let telemetry: Telemetry | null = null;
-let pick: DronePick = { kind: "all" };
+let pick: DronePick | null = null;
 let view: TakeoffView | null = null;
 let held: { pointer: number; id: string } | null = null;
 
@@ -47,9 +47,9 @@ function drawBox(v: TakeoffView): string {
     <text x="${br.px}" y="${br.py + 22}" fill="#687566" text-anchor="end">${(b.x_max - b.x_min).toFixed(1)} m by ${(b.y_max - b.y_min).toFixed(1)} m</text>`;
 }
 
-const drones = (): FleetDrone[] => link.status === "connected" ? fleet(link.welcome.config, telemetry) : [];
+const drones = (): SwarmDrone[] => link.status === "connected" ? swarm(link.welcome.config, telemetry) : [];
 
-function drawDrone(v: TakeoffView, d: FleetDrone, look: { picked: boolean; held: boolean }): string {
+function drawDrone(v: TakeoffView, d: SwarmDrone, look: { picked: boolean; held: boolean }): string {
   const ring = look.picked ? "#25C6E8" : "#687566";
   let marker = "";
   if (d.tel !== null) {
@@ -71,20 +71,21 @@ function render(): void {
     view = fitView(r, link.welcome.config.course.capture_volume);
   }
   svg.style.opacity = link.status === "failed" ? "0.4" : "1";
-  const fleetNow = drones(), v = view, heldId = held?.id;
+  const swarmNow = drones(), v = view, heldId = held?.id;
   const stale = link.status === "connected" ? link.welcome.config.stale_position_ms : Infinity;
-  svg.innerHTML = v === null ? "" : drawBox(v) + fleetNow.map(d => drawDrone(v, d, { picked: isPicked(pick, d.id), held: d.id === heldId })).join("");
-  renderPick(pick);
-  byId("telRows").innerHTML = fleetNow.map(d => telemetryCard(d, isPicked(pick, d.id), stale)).join("");
+  const p = link.status === "connected" ? pick : null, picked = (id: string) => p !== null && isPicked(p, id);
+  svg.innerHTML = v === null ? "" : drawBox(v) + swarmNow.map(d => drawDrone(v, d, { picked: picked(d.id), held: d.id === heldId })).join("");
+  renderPick(p);
+  byId("telRows").innerHTML = swarmNow.map(d => telemetryCard(d, picked(d.id), stale)).join("");
 }
 
 const meters = (p: { x: number; y: number }) => `${p.x.toFixed(2)}, ${p.y.toFixed(2)} m`;
 
-function renderPick(p: DronePick): void {
-  byId("pickLabel").textContent = p.kind === "all" ? "ALL" : p.id;
+function renderPick(p: DronePick | null): void {
+  byId("pickLabel").textContent = p === null ? "--" : p.kind === "all" ? "All" : p.id;
   for (const button of picker.querySelectorAll<HTMLButtonElement>("button")) {
     const id = button.dataset["drone"];
-    button.setAttribute("aria-checked", String(p.kind === "all" ? id === undefined : id === p.id));
+    button.setAttribute("aria-checked", String(p !== null && (p.kind === "all" ? id === undefined : id === p.id)));
   }
 }
 
@@ -94,7 +95,7 @@ function buildPicker(config: HostConfig | null): void {
   picker.innerHTML = [...droneButtons, `<button role="radio">All</button>`].join("");
 }
 
-function telemetryCard(d: FleetDrone, picked: boolean, stale: number): string {
+function telemetryCard(d: SwarmDrone, picked: boolean, stale: number): string {
   const t = d.tel, posAge = t?.pos_age_ms ?? null, battery = t?.battery_v ?? null;
   const pos = t && t.x !== null && t.y !== null ? meters({ x: t.x, y: t.y }) : "--";
   const target = t ? `${meters(t.cmd)}, z ${t.cmd.z.toFixed(2)} m` : "--";
@@ -120,7 +121,7 @@ function showLink(state: ConnectionState): void {
   detailEl.hidden = detail === null;
   byId("configId").textContent = state.status === "connected" ? `Configuration ${state.welcome.config.id}` : "No configuration yet";
   for (const button of buttons) button.disabled = state.status !== "connected";
-  if (state.status === "connected") pick = firstPick(state.welcome.config);
+  if (state.status === "connected") pick = pickAfterWelcome(pick, state.welcome.config);
   buildPicker(state.status === "connected" ? state.welcome.config : null);
   renderSoon();
 }
@@ -154,8 +155,11 @@ picker.addEventListener("click", e => {
 });
 
 svg.addEventListener("pointerdown", e => {
-  const target = dragTarget(pick, drones()), measured = target && dronePoint(target);
-  if (held !== null || view === null || !target || !measured) return;
+  if (held !== null || view === null || pick === null) return;
+  const target = dragTarget(pick, drones());
+  if (target === null) return;
+  const measured = dronePoint(target);
+  if (measured === null) return;
   const p = screenPoint(e), here = toScreen(view, measured);
   if (Math.hypot(p.px - here.px, p.py - here.py) > HIT_R_PX || !bridge.hold(e, target.id)) return;
   e.preventDefault();
@@ -188,7 +192,8 @@ document.addEventListener("visibilitychange", () => {
 const whenConnected = (action: (s: Extract<ConnectionState, { status: "connected" }>) => void) => () => {
   if (link.status === "connected") action(link);
 };
-takeoffButton.addEventListener("click", whenConnected(s => s.command("takeoff", commandTargets(pick, drones()))));
-landButton.addEventListener("click", whenConnected(s => s.command("land", commandTargets(pick, drones()))));
+const flightCommand = (name: FlightCommand) => whenConnected(s => { if (pick !== null) s.command(name, commandTargets(pick, drones())); });
+takeoffButton.addEventListener("click", flightCommand("takeoff"));
+landButton.addEventListener("click", flightCommand("land"));
 stopButton.addEventListener("click", whenConnected(s => s.stop()));
 new ResizeObserver(renderSoon).observe(byId("boxArea"));
