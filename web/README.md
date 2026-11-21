@@ -15,7 +15,7 @@ The interface responds to the operator, but only on screen. It is online at <htt
 - **Telemetry tab:** the event log filters by participant session, then by trial.
 - **Take off and Land:** while connected, the selected drone's button sends `takeoff` or `land` for that drone. Take off all and Land all send nothing yet. The video header and the Telemetry table show each drone's flight state from telemetry. Only a flying drone can be dragged.
 - **E-STOP:** press and hold for 1 s to see it arm and fire. Take off all resets it.
-- **Hand camera:** the camera icon shows a plain preview of the front camera.
+- **Hand camera:** the camera icon shows the front camera and recognizes gestures locally with MediaPipe.
 - **Settings:** the flight-value steppers, Light mode, Left-handed layout, and Fullscreen.
 
 ## What it does not do
@@ -23,7 +23,7 @@ The interface responds to the operator, but only on screen. It is online at <htt
 The tablet simulates nothing itself. The only messages are the connection handshake, takeoff and land commands, input, and telemetry:
 
 - no altitude change, sensor readings, collisions, or defensive hover;
-- no gesture recognition, and no trials that start or end. The input's altitude channel always reports `idle` with rate 0;
+- no altitude command from gestures, and no trials that start or end. The input's altitude channel always reports `idle` with rate 0;
 - no events, and no trial commands. The main page sends no stop command. The flight test page does. The page shows the connection state in the map's top-right corner. It draws each drone entity at its measured position from telemetry. The other panels still show the sample data.
 
 Without a bridge, a dragged drone moves only on the map. Its sample sensor readings belong to its starting spot, so they clear once it moves.
@@ -54,10 +54,7 @@ Prepare the MediaPipe runtime files and gesture model:
 node scripts/setup-mediapipe.mjs
 ```
 
-The first run needs internet access to download the model. The script checks
-its size and SHA-256 against the values recorded in the root README.
-Later runs reuse the verified model. Generated files stay in
-`public/mediapipe/` and are excluded from Git.
+The first run needs internet access to download the model. The script checks its size and SHA-256 against the values recorded in the root README. Later runs reuse the verified model. Generated files stay in `public/mediapipe/` and are excluded from Git.
 
 ```bash
 npm run dev
@@ -66,8 +63,6 @@ npm run dev
 Open the address that Vite prints. `npm run build` writes a static copy to `dist/`, and `npm test` checks the components, the connection module, that the page and the script stay in step, and that the build names no address on another origin.
 
 The page connects to the Python command bridge on `/ws` through `src/connection.ts`. The badge on the map reads "Connecting" on the first attempt and "Connected" once the bridge answers. After a failure it reads "Connection failed" with the cause (bridge lost, no bridge, operator busy, version mismatch, or rejected) and whether the page retries. It retries every second, except after a version mismatch or a rejected `hello`. The map draws no drone entities until the first telemetry and dims them while their data is old. The online copy has no bridge, so it always shows "No bridge, retrying". The [root README](../README.md#run-the-bridge-and-the-tablet-web-app) explains how to start the bridge and serve the page over HTTPS, and [how the bridge serves the built tablet web app](../README.md#run-on-the-tablet-without-internet).
-
-
 
 ## Online copy
 

@@ -60,6 +60,9 @@ class Position:
         """Straight-line distance to `other`, in meters."""
         return math.dist((self.x, self.y, self.z), (other.x, other.y, other.z))
 
+    def is_finite(self) -> bool:
+        return all(math.isfinite(v) for v in (self.x, self.y, self.z))
+
 
 @dataclass(frozen=True)
 class Ranges:
@@ -166,3 +169,10 @@ class DroneConnection(ABC):
     @abstractmethod
     def reports(self) -> list[DroneReport]:
         """Return the latest report for every drone, in configured order."""
+
+    @abstractmethod
+    def close(self) -> dict[str, Reply]:
+        """Land what this drone connection can reach and let go of the drones. The bridge calls it as it exits.
+
+        Returns one reply per drone it tried to land. A second call does nothing.
+        """

@@ -326,8 +326,6 @@ async function toggleCamera(): Promise<void> {
     video.srcObject = ui.camera;
     await video.play().catch(() => {});
 
-
-
     ui.gestureController = new GestureController({
       maxRateMps: ui.settings.rate, // speed limit set in settings
       minConfidence: 0.5, // only use a confident gesture
@@ -341,10 +339,9 @@ async function toggleCamera(): Promise<void> {
     ui.gestureClient = startGestureClient({
       video,
       onResult: (result, tMs) => {
-        const control = ui.gestureController!.update(result, tMs);
-          ui.liveControl = control;
-          renderSoon();
-          console.log("MediaPipe:", result, "Gesture control:", control);
+        cameraNote(""); // results flow again, so clear any old error
+        ui.liveControl = ui.gestureController!.update(result, tMs);
+        renderSoon();
       },
       onError: message => cameraNote(`Gesture recognition: ${message}`)
     });
@@ -358,8 +355,11 @@ async function toggleCamera(): Promise<void> {
   btn.setAttribute("aria-pressed", String(on));
 }
 
+// ignore taps while the camera is still turning on or off, so only one worker runs
+let cameraToggle: Promise<void> | null = null;
 byId("camBtn").addEventListener("click", () => {
-  void toggleCamera();
+  if (cameraToggle) return;
+  cameraToggle = toggleCamera().finally(() => { cameraToggle = null; });
 });
 
 // ---------- settings: display only ----------

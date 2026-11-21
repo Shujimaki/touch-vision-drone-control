@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import time
 import weakref
 from collections.abc import Callable, Mapping
@@ -124,7 +125,7 @@ def create_app(
     if web_app_dir is not None:
         app.router.add_get("/", _serve_index(web_app_dir / "index.html"))
         app.router.add_static("/", web_app_dir)
-    app.on_shutdown.append(_close_sockets)
+    app.on_shutdown.append(_shut_down)
     app.cleanup_ctx.append(_stream_setpoints)
     return app
 
@@ -157,6 +158,18 @@ async def _run_setpoints(setpoints: SetpointStream) -> None:
             logged = True
         next_tick += 1 / SETPOINT_HZ
         await asyncio.sleep(max(0.0, next_tick - loop.time()))
+
+
+async def _shut_down(app: web.Application) -> None:
+    """Land the drones first, so a slow socket can't delay the land."""
+    await _close_drones(app)
+    await _close_sockets(app)
+
+
+async def _close_drones(app: web.Application) -> None:
+    for drone, reply in (await asyncio.to_thread(app[DRONES].close)).items():
+        if not reply.ok:
+            _log.warning("could not land %s as the bridge exits: %s", drone, reply.reason)
 
 
 async def _close_sockets(app: web.Application) -> None:
@@ -356,7 +369,13 @@ class _Connection:
         try:
             text = encode(
                 _telemetry(
-                    self._next_seq(), self._app[CLOCK](), self._ack, reports, setpoints.targets(), setpoints.held()
+                    self._next_seq(),
+                    self._app[CLOCK](),
+                    self._ack,
+                    reports,
+                    setpoints.targets(),
+                    setpoints.held(),
+                    self._app[CONFIG].course,
                 )
             )
         except ValueError:
@@ -420,7 +439,9 @@ def _telemetry(
     reports: list[DroneReport],
     targets: Mapping[str, Position],
     held: frozenset[str],
+    course: Course,
 ) -> Telemetry:
+    pads = {pad.id: Position(pad.x, pad.y, 0.0) for pad in course.pads}
     return Telemetry(
         seq=seq,
         host_ms=_ms(now_s),
@@ -428,22 +449,31 @@ def _telemetry(
         mode="course",
         trial=None,
         altitude=Altitude(rate=0.0, blocked_by=None, reason=None),
-        drones=[_drone_telemetry(r, targets.get(r.drone, r.position), r.drone in held, now_s) for r in reports],
+        drones=[_drone_telemetry(r, _target_or_pad(r, targets, pads), r.drone in held, now_s) for r in reports],
     )
+
+
+def _target_or_pad(report: DroneReport, targets: Mapping[str, Position], pads: Mapping[str, Position]) -> Position:
+    if report.drone in targets:
+        return targets[report.drone]
+    if report.position.is_finite():
+        return report.position
+    return pads.get(report.drone, Position(0.0, 0.0, 0.0))
 
 
 def _drone_telemetry(report: DroneReport, target: Position, held: bool, now_s: float) -> DroneTelemetry:
     position, ranges, hover = report.position, report.ranges, report.defensive_hover
+    has_position, measured = position.is_finite(), math.isfinite(report.position_measured_at)
     return DroneTelemetry(
         id=report.drone,
         held=held,
         state=report.state.value,
         link=report.link.value,
-        x=_v1_length(position.x),
-        y=_v1_length(position.y),
-        z=_v1_length(position.z),
+        x=_v1_length(position.x) if has_position else None,
+        y=_v1_length(position.y) if has_position else None,
+        z=_v1_length(position.z) if has_position else None,
         yaw=None,
-        pos_age_ms=round((now_s - report.position_measured_at) * 1000, 1),
+        pos_age_ms=round((now_s - report.position_measured_at) * 1000, 1) if measured else None,
         cmd=Point(x=_v1_length(target.x), y=_v1_length(target.y), z=_v1_length(target.z)),
         ranges=Ranges(front=ranges.front, back=ranges.back, left=ranges.left, right=ranges.right, up=ranges.up),
         defensive_hover=None if hover is None else DefensiveHover(dir=hover.direction, range=_v1_length(hover.range_m)),

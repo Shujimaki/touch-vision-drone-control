@@ -1,61 +1,43 @@
-// setup gesture recognizer for browser
-// --> where to find runtime and trained model, and config; returns a recognizer
+// sets up the gesture recognizer for the browser and reads one frame at a time
 
-import {
-  FilesetResolver, //locates runtime files
-  GestureRecognizer //class for creating gesture recognizer object
-} from "@mediapipe/tasks-vision";
+import { FilesetResolver, GestureRecognizer } from "@mediapipe/tasks-vision";
 import type { GestureFrameResult } from "./gestureMessages";
 
 export async function createGestureRecognizer(
   assetBaseUrl: string
 ): Promise<GestureRecognizer> {
-  const runtimeUrl = new URL("wasm", assetBaseUrl).href; //address of supporting files
-  const modelUrl = new URL( //address of trained model
-    "gesture_recognizer.task",
-    assetBaseUrl // use the public/mediapipe folder of the web app
-  ).href;
+  // runtime and model come from the web app's public/mediapipe folder, so it works offline
+  const runtimeUrl = new URL("wasm", assetBaseUrl).href;
+  const modelUrl = new URL("gesture_recognizer.task", assetBaseUrl).href;
 
   const vision = await FilesetResolver.forVisionTasks(runtimeUrl, true);
 
-  // create recognizer, use model from mediapipe/gesture_recognizer.task
   return GestureRecognizer.createFromOptions(vision, {
     baseOptions: {
       modelAssetPath: modelUrl
     },
     runningMode: "VIDEO", // successive frames
-    numHands: 1 // max number of hands to detect in each frame
+    numHands: 1 // one operator hand
   });
 }
 
-// for processing camera frame; returns gesture name and height of wrist
 export function readGestureFrame(
-  recognizer: GestureRecognizer, // recognizer object
-  frame: ImageBitmap, // one camera frame that can be transferred to a worker
-  timestampMs: number // timestamp in milliseconds
+  recognizer: GestureRecognizer,
+  frame: ImageBitmap,
+  timestampMs: number
 ): GestureFrameResult {
-    // process specific frame at that timestamp
-    const result = recognizer.recognizeForVideo(frame, timestampMs);
+  const result = recognizer.recognizeForVideo(frame, timestampMs);
 
-    const hand = result.landmarks[0]; // only 1 hand to detect
-    const gesture = result.gestures[0]?.[0]; // get 1st item of from list of gesture results for that hand , if none ? undefined
+  const hand = result.landmarks[0]; // only 1 hand to detect
+  const gesture = result.gestures[0]?.[0]; // best gesture for that hand, if any
 
-    return {
-      handDetected: hand !== undefined, // if hand was detected
-      label: gesture?.categoryName ?? null, // name of gesture
-      score: gesture?.score?? null, // model's confidence score of gesture
-      wristX: hand?.[0]?.x ?? null, // wrist x, needed in the frames sent to the bridge
-      wristY: hand?.[0]?.y ?? null // get first landmark of hand (wrist) and its y coordinate, if no hand detected ? null
-    };
+  return {
+    handDetected: hand !== undefined,
+    label: gesture?.categoryName ?? null,
+    score: gesture?.score ?? null,
+    wristX: hand?.[0]?.x ?? null, // needed in the frames sent to the bridge
+    // landmark 0 of the 21 is the wrist; its y tracks vertical hand movement (0 top, 1 bottom)
+    // https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/python/solutions/hands.py#L45-L66
+    wristY: hand?.[0]?.y ?? null
+  };
 }
-
-/*
- * MediaPipe returns 21 landmarks for each detected hand.
- * Landmark 0 is the wrist. We read its y coordinate to track
- * vertical hand movement: 0 is the image top, 1 is the bottom.
- *
- * Landmark index reference:
- * https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/python/solutions/hands.py#L45-L66
- */
-
-

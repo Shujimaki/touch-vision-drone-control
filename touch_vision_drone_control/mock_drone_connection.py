@@ -87,6 +87,10 @@ class MockDroneConnection(DroneConnection):
             self._drones[drone].target = target
         return reply
 
+    def close(self) -> dict[str, Reply]:
+        """Mock drones need no landing when the bridge exits."""
+        return {}
+
     def reports(self) -> list[DroneReport]:
         self._catch_up()
         return [

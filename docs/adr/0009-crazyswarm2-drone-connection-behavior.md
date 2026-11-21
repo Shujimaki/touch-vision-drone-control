@@ -23,6 +23,10 @@ The Crazyswarm2 drone connection drives cf1 through `crazyflie_py` 1.0.7, as [AD
 
 The takeoff timeout sends land even when the drone's link is lost. During the climb the drone flies on its own planner, and the stream doesn't run. So the 2 s motor cutoff never fires, and nothing else would end the flight. A land the drone can't hear costs nothing, and it reaches the drone if only the poses stopped. The rule that the drone connection doesn't land a drone it can't reach still holds for commands from the bridge and for `close()`.
 
+## Amendment, 2026-11-13: `close()` also lands a climbing drone with a lost link
+
+`close()` sends land to a drone that is climbing, even when its link is lost. `close()` then stops the Crazyswarm2 client, so the takeoff timeout can no longer run, and the reasoning of the first amendment applies. A drone that is flying or stopped with a lost link still gets no land from `close()`. The stream stops when the bridge exits, so the firmware cuts its motors after 2 s. After `close()`, the drone connection refuses every command with the reason `closed`. Decided while writing the real Crazyswarm2 client for issue #50, after a review found the gap.
+
 ## Considered options
 
 - **Stop as an onboard hover (`notifySetpointsStop`, then a relative `goTo`)**: rejected for now. The drone would hold with no radio. But it would keep flying after the bridge died, and every stop would pass through the same planner gap as land.

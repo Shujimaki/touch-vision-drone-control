@@ -26,6 +26,7 @@ export default defineConfig({
   base: "./",
   plugins: [noMediapipeLog()],
   worker: { plugins: () => [noMediapipeLog()] }, // the recognizer runs in a worker
+  optimizeDeps: { exclude: ["@mediapipe/tasks-vision"] }, // pre-bundled deps skip the plugin, so dev would still log
   build: {
     target: "es2022",
     rolldownOptions: { input: { main: join(import.meta.dirname, "index.html"), flightTest: join(import.meta.dirname, "flight-test.html") } },
