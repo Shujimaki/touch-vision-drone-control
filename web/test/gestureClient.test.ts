@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { startGestureClient, type WorkerLike } from "../src/gestureClient";
 import type { GestureFrameResult, GestureWorkerRequest, GestureWorkerResponse } from "../src/gestureMessages";
 
-const RESULT: GestureFrameResult = { handDetected: true, label: "Open_Palm", score: 0.9, wristY: 0.5 };
+const RESULT: GestureFrameResult = { handDetected: true, label: "Open_Palm", score: 0.9, wristX: 0.5, wristY: 0.5 };
 
 // a fake worker, camera and animation-frame loop, so the client runs in node
 function setup() {

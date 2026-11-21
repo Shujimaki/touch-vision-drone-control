@@ -35,6 +35,7 @@ export function readGestureFrame(
     handDetected: hand !== undefined,
     label: gesture?.categoryName ?? null,
     score: gesture?.score ?? null,
+    wristX: hand?.[0]?.x ?? null, // needed in the frames sent to the bridge
     // landmark 0 of the 21 is the wrist; its y tracks vertical hand movement (0 top, 1 bottom)
     // https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/python/solutions/hands.py#L45-L66
     wristY: hand?.[0]?.y ?? null

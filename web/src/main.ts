@@ -3,7 +3,7 @@
 // the operator changes on screen. Nothing is simulated (no flight, sensors or trials). MediaPipe recognizes gestures
 // locally.
 import "./styles.css";
-import { COURSE, SAMPLE, sampleDrones, sampleLog, type TrialRecord } from "./sample";
+import { COURSE, SAMPLE, sampleDrones, sampleLog, type Gesture, type TrialRecord } from "./sample";
 import { PAL, type Pal } from "./theme";
 import { U, batteryLevel, clamp, fmtMS, sg } from "./format";
 import { TRAIL_MS, courseLayer, droneLayer, fitView, toCourse, type View } from "./components/map";
@@ -17,6 +17,7 @@ import { glideStep } from "./glide";
 import { connect, linkLabel, type ConnectionState } from "./connection";
 import { applyTelemetry } from "./droneEntities";
 import { startGestureClient, type GestureClient } from "./gestureClient";
+import { GestureController, type GestureControlState } from "./gestureControl";
 
 export const byId = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -40,6 +41,8 @@ const ui = {
   restrict: SAMPLE.trial.restrict,   // drags rejected at the restricted zone, shown in the Trial card
   telemetrySeen: false,
   gestureClient: null as GestureClient | null,
+  gestureController: null as GestureController | null,
+  liveControl: null as GestureControlState | null,
 };
 let link: ConnectionState = { status: "connecting" };
 const log = sampleLog();
@@ -85,8 +88,25 @@ function renderFeeds(): void {
 }
 
 function renderPanel(): void {
-  const held = heldDrones(), gs = gestureStatus(SAMPLE.gesture, held, SAMPLE.appliedRate);
-  byId("gstat").dataset["k"] = gs.k; byId("gMain").textContent = gs.main; byId("gSub").textContent = gs.sub;
+const held = heldDrones();
+const live = ui.liveControl;
+const gesture: Gesture = live === null
+  ? SAMPLE.gesture
+  : live.mode === "locked"
+    ? "locked"
+    : live.mode === "confirming"
+      ? "confirming"
+      : live.mode === "unrecognized"
+        ? "unrecognized"
+        : live.mode === "hand_loss"
+          ? "lost"
+        : live.mode === "idle"
+          ? "idle"
+          : live.rateMps < 0
+            ? "descend"
+            : "climb";
+const rate = live === null ? SAMPLE.appliedRate : live.rateMps;
+const gs = gestureStatus(gesture, held, rate);  byId("gstat").dataset["k"] = gs.k; byId("gMain").textContent = gs.main; byId("gSub").textContent = gs.sub;
   byId("heldAlt").innerHTML = heldAltitude(held);
   const v = drone(ui.video), up = v.state !== "grounded";
   byId("btnLandSel").hidden = !up; byId("btnTakeoffSel").hidden = up;
@@ -279,8 +299,14 @@ async function toggleCamera(): Promise<void> {
   const video = byId<HTMLVideoElement>("camVideo");
 
   if (ui.camera) {
+    ui.gestureController?.reset();
+    ui.gestureController = null;
+    ui.liveControl = null;
+    renderSoon();
+
     ui.gestureClient?.stop();
     ui.gestureClient = null;
+
     ui.camera.getTracks().forEach(track => track.stop());
     ui.camera = null;
     video.srcObject = null;
@@ -300,9 +326,23 @@ async function toggleCamera(): Promise<void> {
     video.srcObject = ui.camera;
     await video.play().catch(() => {});
 
+    ui.gestureController = new GestureController({
+      maxRateMps: ui.settings.rate, // speed limit set in settings
+      minConfidence: 0.5, // only use a confident gesture
+      confirmMs: 500, // hold palm steady before control starts
+      stillThreshold: 0.04, // restart if the wrist moves during confirmation
+      handLossMs: 300, // hand gone this long counts as hand loss (ADR 0010)
+      deadBand: 0.03, // ignore tiny wrist movements
+      fullRateDisplacement: 0.18 // reach max speed after about 18% of the image
+    });
+
     ui.gestureClient = startGestureClient({
       video,
-      onResult: () => cameraNote(""), // results flow again, so clear any old error
+      onResult: (result, tMs) => {
+        cameraNote(""); // results flow again, so clear any old error
+        ui.liveControl = ui.gestureController!.update(result, tMs);
+        renderSoon();
+      },
       onError: message => cameraNote(`Gesture recognition: ${message}`)
     });
   }

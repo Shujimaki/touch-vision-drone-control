@@ -5,6 +5,7 @@ export interface GestureFrameResult {
   handDetected: boolean;
   label: string | null; // gesture name, like Open_Palm
   score: number | null; // model's confidence in the label
+  wristX: number | null;
   wristY: number | null; // 0 is the image top, 1 is the bottom
 }
 
