@@ -24,7 +24,14 @@ button{font:inherit;color:inherit;border:0;cursor:pointer;touch-action:manipulat
 .ft-btn.st{grid-column:1/-1;background:var(--crit);color:#fff;min-height:64px;font-size:18px}
 .ft-reply{padding:8px 10px;border-radius:4px;font-size:13px;background:#1F241F}
 .ft-reply[data-ok="false"]{color:var(--caut);border:1px solid var(--caut)}
-.ft-tel{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:14px}
+.ft-pick{display:flex;flex-wrap:wrap;gap:8px}
+.ft-pick button{flex:1 1 0;min-width:56px;min-height:56px;border-radius:6px;font-weight:600;background:#283028;border:2px solid transparent}
+.ft-pick button[aria-checked="true"]{border-color:var(--own);color:var(--own)}
+.ft-tel{display:flex;flex-direction:column;gap:10px;font-size:13px}
+.ft-card{padding:8px 10px;border-radius:4px;border:1px solid var(--line-2)}
+.ft-card[data-picked="true"]{border-color:var(--own)}
+.ft-card h2{font-size:14px;font-weight:600;margin-bottom:4px}
+.ft-card dl{display:grid;grid-template-columns:auto 1fr;gap:2px 12px}
 .ft-tel dt{color:var(--tx-2)}
 .ft-tel dd[data-warn="true"]{color:var(--caut)}
 .ft-note{font-size:12px;color:var(--tx-3)}

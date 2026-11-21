@@ -1,9 +1,9 @@
 import "./flightTest.css";
 import { connect, linkLabel, type ConnectionState } from "./connection";
-import type { CommandName, DroneTelemetry, Rect, Reply, Telemetry } from "./protocol";
-import { inBox, takeoffView, toScreen, toTakeoff, type FramePoint, type TakeoffView } from "./takeoffView";
+import { commandTargets, dragTarget, dronePoint, isPicked, pickAfterWelcome, swarm, type DronePick, type SwarmDrone } from "./flightSwarm";
+import type { CommandName, FlightCommand, HostConfig, Rect, Reply, Telemetry } from "./protocol";
+import { inBox, takeoffView, toScreen, toTakeoff, type TakeoffView } from "./takeoffView";
 
-const DRONE = "cf1";
 const ARROW_WALL = "the wall the floor arrow points to";
 const PAD_PX = 48;
 const DRONE_R_PX = 26;
@@ -18,22 +18,16 @@ const byId = <T extends Element = HTMLElement>(id: string): T => {
 const svg = byId<SVGSVGElement>("boxSvg");
 const takeoffButton = byId<HTMLButtonElement>("btnTakeoff"), landButton = byId<HTMLButtonElement>("btnLand");
 const stopButton = byId<HTMLButtonElement>("btnStop"), buttons = [takeoffButton, landButton, stopButton];
+const picker = byId("picker");
 let link: ConnectionState = { status: "connecting" };
-let drone: DroneTelemetry | null = null;
+let telemetry: Telemetry | null = null;
+let pick: DronePick | null = null;
 let view: TakeoffView | null = null;
-let finger: number | null = null;
+let held: { pointer: number; id: string } | null = null;
 
 function fitView(size: { width: number; height: number }, box: Rect): TakeoffView {
   const inner = takeoffView(Math.max(1, size.width - 2 * PAD_PX), Math.max(1, size.height - 2 * PAD_PX), box);
   return { ...inner, left: inner.left + PAD_PX, top: inner.top + PAD_PX };
-}
-
-const TAKEOFF_SPOT: FramePoint = { x: 0, y: 0 };
-
-function dronePoint(d: DroneTelemetry | null): FramePoint | null {
-  if (d === null) return TAKEOFF_SPOT;
-  if (d.x === null || d.y === null) return null;
-  return { x: d.x, y: d.y };
 }
 
 function drawBox(v: TakeoffView): string {
@@ -53,18 +47,21 @@ function drawBox(v: TakeoffView): string {
     <text x="${br.px}" y="${br.py + 22}" fill="#687566" text-anchor="end">${(b.x_max - b.x_min).toFixed(1)} m by ${(b.y_max - b.y_min).toFixed(1)} m</text>`;
 }
 
-function drawDrone(v: TakeoffView, d: DroneTelemetry | null, held: boolean): string {
+const drones = (): SwarmDrone[] => link.status === "connected" ? swarm(link.welcome.config, telemetry) : [];
+
+function drawDrone(v: TakeoffView, d: SwarmDrone, look: { picked: boolean; held: boolean }): string {
+  const ring = look.picked ? "#25C6E8" : "#687566";
   let marker = "";
-  if (d !== null) {
-    const t = toScreen(v, d.cmd);
+  if (d.tel !== null) {
+    const t = toScreen(v, d.tel.cmd);
     marker = `<circle cx="${t.px}" cy="${t.py}" r="${DRONE_R_PX * 0.5}" fill="none" stroke="#25C6E8" stroke-width="2" stroke-dasharray="4 3"/>`;
   }
   const measured = dronePoint(d);
   if (measured === null) return marker;
   const here = toScreen(v, measured);
-  return `${marker}<circle cx="${here.px}" cy="${here.py}" r="${DRONE_R_PX}" fill="${held ? "#25C6E8" : "#16301A"}"
-    stroke="#25C6E8" stroke-width="3"/><text x="${here.px}" y="${here.py + 5}" fill="${held ? "#07120A" : "#E1E8DF"}"
-    text-anchor="middle" font-weight="600">1</text>`;
+  return `${marker}<circle cx="${here.px}" cy="${here.py}" r="${DRONE_R_PX}" fill="${look.held ? "#25C6E8" : "#16301A"}"
+    stroke="${ring}" stroke-width="3"/><text x="${here.px}" y="${here.py + 5}" fill="${look.held ? "#07120A" : "#E1E8DF"}"
+    text-anchor="middle" font-weight="600">${d.id}</text>`;
 }
 
 function render(): void {
@@ -74,26 +71,42 @@ function render(): void {
     view = fitView(r, link.welcome.config.course.capture_volume);
   }
   svg.style.opacity = link.status === "failed" ? "0.4" : "1";
-  const droneLayer = view !== null && link.status === "connected" ? drawDrone(view, drone, finger !== null) : "";
-  svg.innerHTML = view === null ? "" : drawBox(view) + droneLayer;
-  renderTelemetry();
+  const swarmNow = drones(), v = view, heldId = held?.id;
+  const stale = link.status === "connected" ? link.welcome.config.stale_position_ms : Infinity;
+  const p = link.status === "connected" ? pick : null, picked = (id: string) => p !== null && isPicked(p, id);
+  svg.innerHTML = v === null ? "" : drawBox(v) + swarmNow.map(d => drawDrone(v, d, { picked: picked(d.id), held: d.id === heldId })).join("");
+  renderPick(p);
+  byId("telRows").innerHTML = swarmNow.map(d => telemetryCard(d, picked(d.id), stale)).join("");
 }
 
 const meters = (p: { x: number; y: number }) => `${p.x.toFixed(2)}, ${p.y.toFixed(2)} m`;
 
-function renderTelemetry(): void {
-  const stale = link.status === "connected" ? link.welcome.config.stale_position_ms : Infinity, d = drone;
-  byId("telState").textContent = d?.state ?? "--";
-  byId("telPos").textContent = d && d.x !== null && d.y !== null ? meters({ x: d.x, y: d.y }) : "--";
-  byId("telCmd").textContent = d ? `${meters(d.cmd)}, z ${d.cmd.z.toFixed(2)} m` : "--";
-  const age = byId("telAge");
-  const posAge = d?.pos_age_ms ?? null, battery = d?.battery_v ?? null;
-  age.textContent = posAge !== null ? `${Math.round(posAge)} ms` : "--";
-  age.dataset["warn"] = String(posAge !== null && posAge > stale);
-  const radio = byId("telLink");
-  radio.textContent = d?.link ?? "--";
-  radio.dataset["warn"] = String(d?.link === "lost");
-  byId("telBattery").textContent = battery !== null ? `${battery.toFixed(2)} V` : "--";
+function renderPick(p: DronePick | null): void {
+  byId("pickLabel").textContent = p === null ? "--" : p.kind === "all" ? "All" : p.id;
+  for (const button of picker.querySelectorAll<HTMLButtonElement>("button")) {
+    const id = button.dataset["drone"];
+    button.setAttribute("aria-checked", String(p !== null && (p.kind === "all" ? id === undefined : id === p.id)));
+  }
+}
+
+function buildPicker(config: HostConfig | null): void {
+  if (config === null) { picker.innerHTML = ""; return; }
+  const droneButtons = config.drones.map(id => `<button role="radio" data-drone="${id}">${id}</button>`);
+  picker.innerHTML = [...droneButtons, `<button role="radio">All</button>`].join("");
+}
+
+function telemetryCard(d: SwarmDrone, picked: boolean, stale: number): string {
+  const t = d.tel, posAge = t?.pos_age_ms ?? null, battery = t?.battery_v ?? null;
+  const pos = t && t.x !== null && t.y !== null ? meters({ x: t.x, y: t.y }) : "--";
+  const target = t ? `${meters(t.cmd)}, z ${t.cmd.z.toFixed(2)} m` : "--";
+  return `<section class="ft-card" data-picked="${picked}"><h2>${d.id}</h2><dl>
+    <dt>State</dt><dd>${t?.state ?? "--"}</dd>
+    <dt>Position</dt><dd>${pos}</dd>
+    <dt>Target</dt><dd>${target}</dd>
+    <dt>Position age</dt><dd data-warn="${posAge !== null && posAge > stale}">${posAge !== null ? `${Math.round(posAge)} ms` : "--"}</dd>
+    <dt>Radio link</dt><dd data-warn="${t?.link === "lost"}">${t?.link ?? "--"}</dd>
+    <dt>Battery</dt><dd>${battery !== null ? `${battery.toFixed(2)} V` : "--"}</dd>
+  </dl></section>`;
 }
 
 let queued = false;
@@ -108,6 +121,8 @@ function showLink(state: ConnectionState): void {
   detailEl.hidden = detail === null;
   byId("configId").textContent = state.status === "connected" ? `Configuration ${state.welcome.config.id}` : "No configuration yet";
   for (const button of buttons) button.disabled = state.status !== "connected";
+  if (state.status === "connected") pick = pickAfterWelcome(pick, state.welcome.config);
+  buildPicker(state.status === "connected" ? state.welcome.config : null);
   renderSoon();
 }
 
@@ -123,34 +138,46 @@ const bridge = connect({
   client: "tablet-web-flight-test 0.1.0",
   userAgent: navigator.userAgent,
   onState: showLink,
-  onTelemetry: (t: Telemetry) => { drone = t.drones.find(d => d.id === DRONE) ?? null; renderSoon(); },
-  onHostLost: () => { finger = null; drone = null; renderSoon(); },
+  onTelemetry: (t: Telemetry) => { telemetry = t; renderSoon(); },
+  onHostLost: () => { held = null; telemetry = null; renderSoon(); },
   onCommandReply: showReply,
 });
 
 const screenPoint = (e: PointerEvent) => { const r = svg.getBoundingClientRect(); return { px: e.clientX - r.left, py: e.clientY - r.top }; };
 
+picker.addEventListener("click", e => {
+  const button = e.target instanceof Element ? e.target.closest("button") : null;
+  if (button === null) return;
+  const id = button.dataset["drone"];
+  if (id === undefined) pick = { kind: "all" };
+  else if (drones().some(d => d.id === id)) pick = { kind: "one", id };
+  renderSoon();
+});
+
 svg.addEventListener("pointerdown", e => {
-  const measured = dronePoint(drone);
-  if (finger !== null || view === null || measured === null) return;
+  if (held !== null || view === null || pick === null) return;
+  const target = dragTarget(pick, drones());
+  if (target === null) return;
+  const measured = dronePoint(target);
+  if (measured === null) return;
   const p = screenPoint(e), here = toScreen(view, measured);
-  if (Math.hypot(p.px - here.px, p.py - here.py) > HIT_R_PX || !bridge.hold(e, DRONE)) return;
+  if (Math.hypot(p.px - here.px, p.py - here.py) > HIT_R_PX || !bridge.hold(e, target.id)) return;
   e.preventDefault();
   svg.setPointerCapture(e.pointerId);
-  finger = e.pointerId;
+  held = { pointer: e.pointerId, id: target.id };
   renderSoon();
 });
 svg.addEventListener("pointermove", e => {
-  if (e.pointerId !== finger || view === null) return;
+  if (e.pointerId !== held?.pointer || view === null) return;
   e.preventDefault();
   const p = toTakeoff(view, screenPoint(e));
   if (!inBox(view.box, p)) return;
   bridge.drag({ pointerId: e.pointerId, timeStamp: e.timeStamp, x: p.x, y: p.y });
 });
 function release(e: PointerEvent): void {
-  if (e.pointerId !== finger) return;
+  if (e.pointerId !== held?.pointer) return;
   bridge.lift(e.pointerId);
-  finger = null;
+  held = null;
   renderSoon();
 }
 svg.addEventListener("pointerup", release);
@@ -158,14 +185,15 @@ svg.addEventListener("pointercancel", release);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "hidden") return;
   bridge.releaseAllAndSendInput();
-  finger = null;
+  held = null;
   renderSoon();
 });
 
 const whenConnected = (action: (s: Extract<ConnectionState, { status: "connected" }>) => void) => () => {
   if (link.status === "connected") action(link);
 };
-takeoffButton.addEventListener("click", whenConnected(s => s.command("takeoff", [DRONE])));
-landButton.addEventListener("click", whenConnected(s => s.command("land", [DRONE])));
+const flightCommand = (name: FlightCommand) => whenConnected(s => { if (pick !== null) s.command(name, commandTargets(pick, drones())); });
+takeoffButton.addEventListener("click", flightCommand("takeoff"));
+landButton.addEventListener("click", flightCommand("land"));
 stopButton.addEventListener("click", whenConnected(s => s.stop()));
 new ResizeObserver(renderSoon).observe(byId("boxArea"));

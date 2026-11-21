@@ -52,6 +52,49 @@ def test_the_takeoff_configuration_keeps_the_course_timeouts_and_rates() -> None
     assert {k: getattr(config, k) for k in timing} == {k: getattr(PLACEHOLDER_CONFIG, k) for k in timing}
 
 
+def _inside(outer: Rect, inner: Rect) -> bool:
+    return outer.x_min <= inner.x_min and inner.x_max <= outer.x_max and outer.y_min <= inner.y_min and inner.y_max <= outer.y_max
+
+
+def _overlap(a: Rect, b: Rect) -> bool:
+    return a.x_min < b.x_max and b.x_min < a.x_max and a.y_min < b.y_max and b.y_min < a.y_max
+
+
+def test_the_takeoff3_configuration_puts_cf1_cf2_cf3_on_pads_0_6_m_apart_across_the_arrow() -> None:
+    options = option_parser().parse_args(["--config", "takeoff3"])
+
+    config, drones = build_bridge(options.drones, options.config, FakeClock())
+
+    assert config.drones == ["cf1", "cf2", "cf3"]
+    assert {pad.id: (pad.x, pad.y) for pad in config.course.pads} == {"cf1": (0.0, 0.0), "cf2": (0.0, 0.6), "cf3": (0.0, -0.6)}
+    assert {r.drone: (r.state, r.position) for r in drones.reports()} == {
+        "cf1": (FlightState.GROUNDED, Position(0.0, 0.0, 0.0)),
+        "cf2": (FlightState.GROUNDED, Position(0.0, 0.6, 0.0)),
+        "cf3": (FlightState.GROUNDED, Position(0.0, -0.6, 0.0)),
+    }
+
+
+def test_the_takeoff3_pads_lie_in_the_capture_volume_and_the_restricted_zone_lies_outside_it() -> None:
+    config, _ = build_bridge("mock", "takeoff3", FakeClock())
+    course = config.course
+
+    assert [pad.id for pad in course.pads] == config.drones
+    assert _inside(course.room, course.capture_volume)
+    for pad in course.pads:
+        assert _inside(course.capture_volume, Rect(x_min=pad.x, x_max=pad.x, y_min=pad.y, y_max=pad.y)), pad.id
+    assert _inside(course.room, course.restricted_zone)
+    assert not _overlap(course.restricted_zone, course.capture_volume)
+
+
+def test_the_takeoff3_configuration_keeps_the_takeoff_heights_and_timing() -> None:
+    takeoff, _ = build_bridge("mock", "takeoff", FakeClock())
+    config, _ = build_bridge("mock", "takeoff3", FakeClock())
+
+    fields = ["z_min", "z_max", "input_hz", "telemetry_hz", "input_timeout_ms", "telemetry_timeout_ms",
+              "stale_position_ms", "rate_max"]
+    assert {k: getattr(config, k) for k in fields} == {k: getattr(takeoff, k) for k in fields}
+
+
 def test_crazyswarm2_without_its_module_stops_the_bridge_with_a_clear_error(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, CRAZYSWARM2_MODULE, None)
 
