@@ -75,7 +75,7 @@ Replace `<laptop-ip>` with the laptop's address on the team's router.
 
 In the lab the tablet joins the team's router, which has no internet. The bridge then serves the built tablet web app and `/ws` from one HTTPS origin, so the flight host runs one server and no Vite ([ADR 0005](docs/adr/0005-bridge-serves-the-tablet-web-app.md)). An origin is the scheme, address, and port of a URL, such as `https://192.168.1.10:8765`. `web/test/build.test.ts` builds the tablet web app and fails if a built file names an address on another origin or references an asset that the build does not contain.
 
-1. Build the tablet web app. From `web/`, run `npm run build`. It writes `web/dist/`.
+1. Build the tablet web app. From `web/`, run `npm ci`, then `node scripts/setup-mediapipe.mjs` (it needs internet the first time), then `npm run build`. It writes `web/dist/`, with the gesture model and runtime in `web/dist/mediapipe/`.
 2. Make the certificate as the commands above show, with the flight host's address in place of `<laptop-ip>`.
 3. Install the mkcert root certificate on the Galaxy Tab S9. `mkcert -CAROOT` prints the folder that holds it. Copy only `rootCA.pem` to the tablet. Never copy `rootCA-key.pem`, because anyone with that file can make certificates the tablet trusts. [[18]](https://github.com/FiloSottile/mkcert) On the tablet, search Settings for "CA certificate", choose it, and pick the copied file. This menu path and whether Chrome trusts a CA that the user installed are not tested on the Tab S9 yet.
 4. On the flight host, from the repository root, start the bridge on every network address with the tablet web app and the certificate:
